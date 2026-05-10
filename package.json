@@ -1,7 +1,7 @@
 {
 	"name": "okr-manager",
-	"version": "0.1.0",
-	"description": "Manage OKRs inside your Obsidian vault with a streamlined dashboard and built-in check-ins.",
+	"version": "0.1.1",
+	"description": "Manage OKRs inside your vault with a streamlined dashboard and built-in check-ins.",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {

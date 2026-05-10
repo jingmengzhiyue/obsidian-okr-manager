@@ -1,9 +1,9 @@
 {
 	"id": "okr-manager",
 	"name": "OKR Manager",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"minAppVersion": "1.4.0",
-	"description": "Manage OKRs inside your Obsidian vault with a streamlined dashboard and built-in check-ins.",
+	"description": "Manage OKRs inside your vault with a streamlined dashboard and built-in check-ins.",
 	"author": "jingmengzhiyue",
 	"authorUrl": "https://github.com/jingmengzhiyue",
 	"isDesktopOnly": false
