@@ -1,90 +1,266 @@
-# Obsidian Sample Plugin
+<div align="center">
 
-This is a sample plugin for Obsidian (https://obsidian.md).
+# OKR Manager
 
-This project uses TypeScript to provide type checking and documentation.
-The repo depends on the latest plugin API (obsidian.d.ts) in TypeScript Definition format, which contains TSDoc comments describing what it does.
+Manage OKRs directly inside your Obsidian vault with a streamlined dashboard, built-in check-ins, and one-file-per-objective storage.
 
-This sample plugin demonstrates some of the basic functionality the plugin API can do.
-- Adds a ribbon icon, which shows a Notice when clicked.
-- Adds a command "Open modal (simple)" which opens a Modal.
-- Adds a plugin setting tab to the settings page.
-- Registers a global click event and output 'click' to the console.
-- Registers a global interval which logs 'setInterval' to the console.
+![Obsidian](https://img.shields.io/badge/Obsidian-%3E%3D1.4.0-blueviolet)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Version](https://img.shields.io/badge/version-0.1.0-blue)
 
-## First time developing plugins?
+[中文文档](./README.zh-CN.md) · [Features](#features) · [Installation](#installation) · [Quick Start](#quick-start) · [Usage](#usage) · [FAQ](#faq)
 
-Quick starting guide for new plugin devs:
+</div>
 
-- Check if [someone already developed a plugin for what you want](https://obsidian.md/plugins)! There might be an existing plugin similar enough that you can partner up with.
-- Make a copy of this repo as a template with the "Use this template" button (login to GitHub if you don't see it).
-- Clone your repo to a local development folder. For convenience, you can place this folder in your `.obsidian/plugins/your-plugin-name` folder.
-- Install NodeJS, then run `npm i` in the command line under your repo folder.
-- Run `npm run dev` to compile your plugin from `main.ts` to `main.js`.
-- Make changes to `main.ts` (or create new `.ts` files). Those changes should be automatically compiled into `main.js`.
-- Reload Obsidian to load the new version of your plugin.
-- Enable plugin in settings window.
-- For updates to the Obsidian API run `npm update` in the command line under your repo folder.
+---
 
-## Releasing new releases
+> Screenshot TODO: add a dashboard screenshot or short GIF demo.
 
-- Update your `manifest.json` with your new version number, such as `1.0.1`, and the minimum Obsidian version required for your latest release.
-- Update your `versions.json` file with `"new-plugin-version": "minimum-obsidian-version"` so older versions of Obsidian can download an older version of your plugin that's compatible.
-- Create new GitHub release using your new version number as the "Tag version". Use the exact version number, don't include a prefix `v`. See here for an example: https://github.com/obsidianmd/obsidian-sample-plugin/releases
-- Upload the files `manifest.json`, `main.js`, `styles.css` as binary attachments. Note: The manifest.json file must be in two places, first the root path of your repository and also in the release.
-- Publish the release.
+## Overview
 
-> You can simplify the version bump process by running `npm version patch`, `npm version minor` or `npm version major` after updating `minAppVersion` manually in `manifest.json`.
-> The command will bump version in `manifest.json` and `package.json`, and add the entry for the new version to `versions.json`
+OKR Manager is an Obsidian community plugin for planning, tracking, and reviewing Objectives and Key Results directly inside your vault.
 
-## Adding your plugin to the community plugin list
+Instead of creating one Markdown file for every key result, this plugin keeps each objective in a single file and stores its key results inside that file. The result is a cleaner folder structure, fewer files to manage, and faster rendering in the dashboard.
 
-- Check the [plugin guidelines](https://docs.obsidian.md/Plugins/Releasing/Plugin+guidelines).
-- Publish an initial version.
-- Make sure you have a `README.md` file in the root of your repo.
-- Make a pull request at https://github.com/obsidianmd/obsidian-releases to add your plugin.
+All data stays local in plain Markdown and YAML frontmatter. No external service, database, or online dependency is required.
 
-## How to use
+## Features
 
-- Clone this repo.
-- Make sure your NodeJS is at least v16 (`node --version`).
-- `npm i` or `yarn` to install dependencies.
-- `npm run dev` to start compilation in watch mode.
+- One file per objective with embedded key results
+- Built-in dashboard for browsing objectives and progress by period
+- Weekly, monthly, quarterly, and yearly OKR periods
+- Automatic progress calculation for key results and objectives
+- Built-in check-in workflow for recording progress updates
+- Support for `score`, `percentage`, `number`, and `boolean` key result units
+- Native Obsidian styling with dark and light theme support
+- Local-first Markdown storage that works well with sync and version control
 
-## Manually installing the plugin
+## Installation
 
-- Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
+### Community plugins marketplace
 
-## Improve code quality with eslint
-- [ESLint](https://eslint.org/) is a tool that analyzes your code to quickly find problems. You can run ESLint against your plugin to find common bugs and ways to improve your code. 
-- This project already has eslint preconfigured, you can invoke a check by running`npm run lint`
-- Together with a custom eslint [plugin](https://github.com/obsidianmd/eslint-plugin) for Obsidan specific code guidelines.
-- A GitHub action is preconfigured to automatically lint every commit on all branches.
+Once the plugin is accepted into the official Obsidian community plugins directory:
 
-## Funding URL
+1. Open Obsidian.
+2. Go to **Settings → Community plugins**.
+3. Disable safe mode if it is enabled.
+4. Select **Browse**.
+5. Search for `OKR Manager`.
+6. Install and enable the plugin.
 
-You can include funding URLs where people who use your plugin can financially support it.
+### Manual installation
 
-The simple way is to set the `fundingUrl` field to your link in your `manifest.json` file:
+1. Open the latest release page: [Releases](https://github.com/jingmengzhiyue/obsidian-okr-manager/releases/latest)
+2. Download these files:
+   - `main.js`
+   - `manifest.json`
+   - `styles.css`
+3. Open your vault folder.
+4. Go to `.obsidian/plugins/`.
+5. Create a folder named `okr-manager`.
+6. Copy the downloaded files into that folder.
+7. Restart Obsidian or reload community plugins.
+8. Enable `OKR Manager` in **Settings → Community plugins**.
 
-```json
-{
-    "fundingUrl": "https://buymeacoffee.com"
-}
+```text
+YourVault/
+└── .obsidian/
+    └── plugins/
+        └── okr-manager/
+            ├── main.js
+            ├── manifest.json
+            └── styles.css
 ```
 
-If you have multiple URLs, you can also do:
+## Quick Start
 
-```json
-{
-    "fundingUrl": {
-        "Buy Me a Coffee": "https://buymeacoffee.com",
-        "GitHub Sponsor": "https://github.com/sponsors",
-        "Patreon": "https://www.patreon.com/"
-    }
-}
+### 1. Review the defaults
+
+Open **Settings → OKR Manager** and review these defaults:
+
+| Setting | Default | Description |
+|------|------|------|
+| `OKR root directory` | `OKR` | Root folder for objective files |
+| `Check-in directory` | `OKR/Check-ins` | Folder for check-in notes |
+| `Default period type` | `quarter` | Default period type for new objectives |
+| `Auto compute progress` | `true` | Automatically compute progress from current and target |
+| `Open dashboard on startup` | `false` | Open the dashboard automatically on startup |
+
+### 2. Create your first objective
+
+1. Open the command palette with `Ctrl+P` or `Cmd+P`.
+2. Run `新建 Objective`.
+3. Choose a period type:
+   - Week
+   - Month
+   - Quarter
+   - Year
+4. Enter a period value:
+   - Week: `2026-W20`
+   - Month: `2026-05`
+   - Quarter: `2026-Q2`
+   - Year: `2026`
+5. Enter a title, owner, and due date.
+6. Click **Create**.
+
+The plugin creates a file such as `OKR/2026-Q2/O1.md`.
+
+### 3. Add key results
+
+1. Run `新建 Key Result`.
+2. Select the period and target objective.
+3. Enter the key result title, owner, unit, current value, target value, and confidence.
+4. Click **Create**.
+
+No separate key result file is created. The key result is saved inside the objective file.
+
+### 4. Record a check-in
+
+1. Run `记录 Check-in 进度`.
+2. Select a key result.
+3. Enter the latest current value or adjust the progress directly.
+4. Optionally add notes and blockers.
+5. Save the check-in.
+
+### 5. Open the dashboard
+
+1. Run `打开 OKR Dashboard`.
+2. Review objectives, key results, and progress in the right sidebar.
+
+## Usage
+
+### Folder structure
+
+The default structure looks like this:
+
+```text
+OKR/
+├── 2026-Q2/
+│   ├── O1.md
+│   └── O2.md
+└── Check-ins/
+    ├── 2026-05-09-O1-KR1.md
+    └── 2026-05-16-O1-KR1.md
 ```
 
-## API Documentation
+Key differences from a one-file-per-KR design:
 
-See https://docs.obsidian.md
+- Objective files contain all related key results
+- The vault stays cleaner as OKR data grows
+- Dashboard loading requires fewer file scans
+
+### Commands
+
+| Command | Description |
+|------|------|
+| `新建 Objective` | Create a new objective |
+| `新建 Key Result` | Add a key result to an objective |
+| `记录 Check-in 进度` | Record progress for a key result |
+| `打开 OKR Dashboard` | Open or focus the OKR dashboard |
+
+### Period formats
+
+| Type | Format | Example |
+|------|------|------|
+| Week | `YYYY-Www` | `2026-W20` |
+| Month | `YYYY-MM` | `2026-05` |
+| Quarter | `YYYY-Qn` | `2026-Q2` |
+| Year | `YYYY` | `2026` |
+
+### Objective file model
+
+Each objective file stores:
+
+- Objective metadata
+- A `key-results` array
+- A reserved block for rendered key result content
+
+Example:
+
+```yaml
+---
+okr-type: objective
+okr-id: O1
+okr-period: 2026-Q2
+okr-period-type: quarter
+title: Improve engineering quality
+owner: Team Lead
+progress: 68
+key-results:
+  - okr-id: O1-KR1
+    title: Reach 100% review coverage
+    current: 80
+    target: 100
+    progress: 80
+---
+```
+
+### Progress rules
+
+Key result progress:
+
+- `boolean` becomes `100%` when completed, otherwise `0%`
+- Other numeric units use `current / target * 100`
+- If `target <= 0`, progress is `0%`
+- Progress is clamped to `0–100`
+
+Objective progress:
+
+- Average of all non-cancelled key results
+- `0%` when no valid key results exist
+
+### Old data model
+
+This version does not support the old data model where every key result had its own Markdown file.
+
+If you used an earlier local prototype:
+
+- old standalone KR files are not migrated automatically
+- the new plugin does not read them
+- you should reorganize those key results into the new objective files manually
+
+## FAQ
+
+### Why does the plugin no longer create one file per key result?
+
+Because the storage model was simplified to keep all key results inside the objective file. This reduces file clutter and improves dashboard performance.
+
+### Why does clicking a key result open the objective file?
+
+Because key results are now embedded in the objective file instead of having separate files.
+
+### Does this plugin send data to any online service?
+
+No. The plugin stores everything in your local vault.
+
+### Can I use week and month periods instead of quarter periods?
+
+Yes. The plugin supports week, month, quarter, and year period types.
+
+### Will `target = 0` break progress calculation?
+
+No. The plugin safely returns `0%`.
+
+### Can I use it on mobile?
+
+Yes. The plugin is not desktop-only.
+
+## Development
+
+```bash
+git clone https://github.com/jingmengzhiyue/obsidian-okr-manager.git
+cd obsidian-okr-manager
+npm install
+npm run dev
+```
+
+Before opening a release:
+
+1. Update `manifest.json`
+2. Update `versions.json`
+3. Run `npm run build`
+4. Upload `main.js`, `manifest.json`, and `styles.css` to the GitHub release
+
+## License
+
+This project is licensed under the [MIT License](./LICENSE).

@@ -1,99 +1,136 @@
-import {App, Editor, MarkdownView, Modal, Notice, Plugin} from 'obsidian';
-import {DEFAULT_SETTINGS, MyPluginSettings, SampleSettingTab} from "./settings";
+import { Plugin, TAbstractFile } from "obsidian";
+import { OKRPluginSettings, DEFAULT_SETTINGS } from "./types";
+import { OKRManager } from "./manager/OKRManager";
+import { DashboardView, DASHBOARD_VIEW_TYPE } from "./views/DashboardView";
+import { OKRDetailRenderer } from "./views/OKRDetailRenderer";
+import { NewObjectiveModal } from "./modals/NewObjectiveModal";
+import { NewKRModal } from "./modals/NewKRModal";
+import { CheckInModal } from "./modals/CheckInModal";
+import { SettingsTab } from "./settings/SettingsTab";
 
-// Remember to rename these classes and interfaces!
+export default class OKRPlugin extends Plugin {
+	settings!: OKRPluginSettings;
+	manager!: OKRManager;
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
-
-	async onload() {
+	async onload(): Promise<void> {
 		await this.loadSettings();
+		this.manager = new OKRManager(this.app, this.settings);
 
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
+		// 注册缓存失效事件（通过 registerEvent 确保插件禁用时自动清理）
+		this.registerEvent(
+			this.app.vault.on("modify", (file: TAbstractFile) =>
+				this.manager.invalidateCacheForFile(file),
+			),
+		);
+		this.registerEvent(
+			this.app.vault.on("delete", (file: TAbstractFile) =>
+				this.manager.invalidateCacheForFile(file),
+			),
+		);
+		this.registerEvent(
+			this.app.vault.on(
+				"rename",
+				(file: TAbstractFile, oldPath: string) => {
+					this.manager.invalidateCacheByPath(oldPath);
+					this.manager.invalidateCacheForFile(file);
+				},
+			),
+		);
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
+		// 注册 Dashboard 侧边栏视图
+		this.registerView(
+			DASHBOARD_VIEW_TYPE,
+			(leaf) => new DashboardView(leaf, this.manager),
+		);
 
-		// This adds a simple command that can be triggered anywhere
+		// 注册 Markdown 后处理器（渲染 KR 列表和 check-in 历史）
+		this.registerMarkdownPostProcessor(
+			OKRDetailRenderer.postProcessor(this.manager),
+		);
+
+		// 注册 Commands
 		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
+			id: "okr-new-objective",
+			name: "新建 Objective",
+			callback: () =>
+				new NewObjectiveModal(this.app, this.manager, () =>
+					this.refreshDashboard(),
+				).open(),
 		});
-		// This adds an editor command that can perform some operation on the current editor instance
 		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				editor.replaceSelection('Sample editor command');
-			}
+			id: "okr-new-kr",
+			name: "新建 Key Result",
+			callback: () =>
+				new NewKRModal(this.app, this.manager, {
+					onComplete: () => this.refreshDashboard(),
+				}).open(),
 		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
 		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-				return false;
-			}
+			id: "okr-check-in",
+			name: "记录 Check-in 进度",
+			callback: () =>
+				new CheckInModal(this.app, this.manager, {
+					onComplete: () => this.refreshDashboard(),
+				}).open(),
+		});
+		this.addCommand({
+			id: "okr-open-dashboard",
+			name: "打开 OKR Dashboard",
+			callback: () => this.activateDashboard(),
 		});
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
+		// Ribbon 图标
+		this.addRibbonIcon("target", "OKR Dashboard", () =>
+			this.activateDashboard(),
+		);
 
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			new Notice("Click");
-		});
+		// 设置页
+		this.addSettingTab(new SettingsTab(this.app, this));
 
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
-
+		// 启动时自动打开 Dashboard
+		if (this.settings.showDashboardOnStartup) {
+			this.app.workspace.onLayoutReady(() => this.activateDashboard());
+		}
 	}
 
-	onunload() {
+	async activateDashboard(): Promise<void> {
+		const leaves = this.app.workspace.getLeavesOfType(DASHBOARD_VIEW_TYPE);
+		if (leaves.length === 0) {
+			const leaf = this.app.workspace.getRightLeaf(false);
+			if (leaf) {
+				await leaf.setViewState({
+					type: DASHBOARD_VIEW_TYPE,
+					active: true,
+				});
+			}
+		}
+		const targetLeaves =
+			this.app.workspace.getLeavesOfType(DASHBOARD_VIEW_TYPE);
+		if (targetLeaves.length > 0) {
+			this.app.workspace.revealLeaf(targetLeaves[0]!);
+		}
 	}
 
-	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<MyPluginSettings>);
+	refreshDashboard(): void {
+		const leaves = this.app.workspace.getLeavesOfType(DASHBOARD_VIEW_TYPE);
+		for (const leaf of leaves) {
+			const view = leaf.view;
+			if (view instanceof DashboardView) {
+				view.refresh();
+			}
+		}
 	}
 
-	async saveSettings() {
+	async loadSettings(): Promise<void> {
+		const loaded = await this.loadData();
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
+		if (!this.settings.defaultPeriodType) {
+			this.settings.defaultPeriodType = "quarter";
+		}
+	}
+
+	async saveSettings(): Promise<void> {
 		await this.saveData(this.settings);
-	}
-}
-
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
-
-	onOpen() {
-		let {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
+		this.manager.updateSettings(this.settings);
 	}
 }

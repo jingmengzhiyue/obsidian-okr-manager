@@ -1,8 +1,766 @@
-/*
+/* ===========================
+   OKR Manager — 完整样式表
+   使用 Obsidian CSS 变量，自动适配深色/浅色主题
+   =========================== */
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+/* ---------- 根容器 ---------- */
+.okr-dashboard {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+  font-size: var(--font-ui-medium);
+  color: var(--text-normal);
+  background: var(--background-primary);
+}
 
-If your plugin does not need CSS, delete this file.
+/* ---------- 工具栏 ---------- */
+.okr-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  flex-shrink: 0;
+}
 
-*/
+.okr-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.okr-logo {
+  font-size: 16px;
+  color: var(--interactive-accent);
+  line-height: 1;
+}
+
+.okr-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-normal);
+  text-transform: uppercase;
+}
+
+.okr-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.okr-period-select {
+  font-size: var(--font-ui-small);
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  color: var(--text-normal);
+  padding: 3px 6px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.okr-period-select:hover,
+.okr-period-select:focus {
+  border-color: var(--interactive-accent);
+}
+
+.okr-btn-icon {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-s);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+  transition: background 0.15s, color 0.15s;
+  padding: 0;
+}
+.okr-btn-icon:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+/* ---------- 总览数字带 ---------- */
+.okr-summary-bar {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  gap: 0;
+  background: var(--background-secondary);
+  border-bottom: 1px solid var(--background-modifier-border);
+  flex-shrink: 0;
+}
+
+.okr-summary-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.okr-summary-num {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-normal);
+  line-height: 1;
+}
+
+.okr-summary-num.okr-num-accent {
+  color: var(--interactive-accent);
+}
+
+.okr-summary-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.03em;
+}
+
+.okr-summary-divider {
+  width: 1px;
+  height: 28px;
+  background: var(--background-modifier-border);
+}
+
+/* ---------- OKR 列表滚动区 ---------- */
+.okr-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 10px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 自定义滚动条 */
+.okr-list::-webkit-scrollbar { width: 4px; }
+.okr-list::-webkit-scrollbar-track { background: transparent; }
+.okr-list::-webkit-scrollbar-thumb {
+  background: var(--background-modifier-border);
+  border-radius: 2px;
+}
+.okr-list::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
+}
+
+/* ---------- Objective 卡片 ---------- */
+.okr-obj-card {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background: var(--background-secondary);
+  overflow: hidden;
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.okr-obj-card:hover {
+  border-color: var(--background-modifier-border-hover);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.okr-obj-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 10px 6px;
+  gap: 8px;
+}
+
+.okr-obj-header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0; /* 允许文字截断 */
+}
+
+.okr-collapse-btn {
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  transition: color 0.15s, transform 0.2s;
+}
+.okr-collapse-btn:hover { color: var(--text-normal); }
+.okr-collapse-btn.okr-collapsed { transform: rotate(-90deg); }
+
+.okr-obj-id {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-faint);
+  background: var(--background-modifier-border);
+  padding: 1px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  letter-spacing: 0.05em;
+}
+
+.okr-obj-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-normal);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.15s;
+}
+.okr-obj-title:hover { color: var(--text-accent); }
+
+.okr-obj-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.okr-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+}
+.okr-status-active   { background: rgba(var(--color-blue-rgb),   0.12); color: var(--color-blue); }
+.okr-status-completed{ background: rgba(var(--color-green-rgb),  0.12); color: var(--color-green); }
+.okr-status-on-hold  { background: rgba(var(--color-yellow-rgb), 0.12); color: var(--color-yellow); }
+.okr-status-cancelled{ background: rgba(var(--color-red-rgb),    0.08); color: var(--text-faint); text-decoration: line-through; }
+
+.okr-progress-num {
+  font-size: 13px;
+  font-weight: 700;
+  min-width: 36px;
+  text-align: right;
+  color: var(--text-normal);
+}
+
+.okr-more-btn { opacity: 0; transition: opacity 0.15s; }
+.okr-obj-card:hover .okr-more-btn { opacity: 1; }
+
+/* ---------- Objective 进度条 ---------- */
+.okr-obj-progress-wrap {
+  padding: 0 10px 8px;
+}
+
+.okr-obj-progress-track {
+  height: 5px;
+  background: var(--background-modifier-border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.okr-obj-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ---------- 进度颜色（共用） ---------- */
+.okr-prog-high   { background: var(--color-green); }
+.okr-prog-medium { background: var(--color-yellow); }
+.okr-prog-low    { background: var(--color-red); }
+
+/* ---------- KR 列表 ---------- */
+.okr-kr-list {
+  border-top: 1px solid var(--background-modifier-border);
+  padding: 4px 0 6px;
+}
+
+.okr-kr-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 10px;
+  gap: 8px;
+  cursor: pointer;
+  border-radius: 0;
+  transition: background 0.1s;
+}
+.okr-kr-row:hover {
+  background: var(--background-modifier-hover);
+}
+
+.okr-kr-row-left {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* 信心水平圆点 */
+.okr-kr-dot {
+  font-size: 8px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.okr-conf-high   { color: var(--color-green); }
+.okr-conf-medium { color: var(--color-yellow); }
+.okr-conf-low    { color: var(--color-red); }
+
+.okr-kr-title {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.15s;
+}
+.okr-kr-row:hover .okr-kr-title { color: var(--text-normal); }
+
+.okr-kr-row-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.okr-kr-value {
+  font-size: 10px;
+  color: var(--text-faint);
+  min-width: 40px;
+  text-align: right;
+}
+
+.okr-kr-bar-wrap {
+  width: 52px;
+  height: 3px;
+  background: var(--background-modifier-border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.okr-kr-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.okr-kr-pct {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-normal);
+  min-width: 30px;
+  text-align: right;
+}
+
+.okr-checkin-btn {
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  border-radius: 3px;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+  padding: 0;
+}
+.okr-kr-row:hover .okr-checkin-btn {
+  opacity: 1;
+}
+.okr-checkin-btn:hover {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+/* ---------- 添加 KR 按钮 ---------- */
+.okr-add-kr-row {
+  padding: 3px 10px 2px;
+}
+
+.okr-add-kr-btn {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+  padding: 4px 0;
+  border-radius: 3px;
+  transition: color 0.15s;
+}
+.okr-add-kr-btn:hover { color: var(--interactive-accent); }
+
+/* ---------- 底部 ---------- */
+.okr-footer {
+  padding: 10px 14px 14px;
+  border-top: 1px solid var(--background-modifier-border);
+  flex-shrink: 0;
+}
+
+.okr-btn-primary {
+  width: 100%;
+  padding: 7px 0;
+  border: 1px dashed var(--background-modifier-border);
+  background: transparent;
+  border-radius: var(--radius-m);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.okr-btn-primary:hover {
+  border-color: var(--interactive-accent);
+  color: var(--interactive-accent);
+  background: rgba(var(--interactive-accent-rgb), 0.06);
+}
+
+/* ---------- 空状态 ---------- */
+.okr-empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--text-faint);
+  padding: 40px 20px;
+  text-align: center;
+}
+.okr-empty-icon { font-size: 36px; opacity: 0.4; }
+.okr-empty-text { font-size: 13px; line-height: 1.5; }
+.okr-empty-btn {
+  margin-top: 6px;
+  padding: 6px 16px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.okr-empty-btn:hover {
+  border-color: var(--interactive-accent);
+  color: var(--interactive-accent);
+}
+
+/* ---------- Modal 表单 ---------- */
+.okr-modal .modal-content {
+  padding: 20px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.okr-modal-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-normal);
+  margin: 0 0 6px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.okr-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.okr-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+.okr-label .okr-required {
+  color: var(--color-red);
+  margin-left: 2px;
+}
+
+.okr-input,
+.okr-select,
+.okr-textarea {
+  width: 100%;
+  padding: 7px 10px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  color: var(--text-normal);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  box-sizing: border-box;
+}
+
+.okr-input:focus,
+.okr-select:focus,
+.okr-textarea:focus {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.15);
+}
+
+.okr-input.okr-invalid {
+  border-color: var(--color-red);
+  box-shadow: 0 0 0 2px rgba(var(--color-red-rgb), 0.15);
+}
+
+.okr-input-hint {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.okr-input-error {
+  font-size: 11px;
+  color: var(--color-red);
+  display: none;
+}
+.okr-input-error.visible { display: block; }
+
+.okr-textarea {
+  resize: vertical;
+  min-height: 64px;
+  font-family: inherit;
+  line-height: 1.5;
+}
+
+/* 进度滑块（Check-in modal） */
+.okr-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.okr-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--background-modifier-border);
+  outline: none;
+  cursor: pointer;
+}
+
+.okr-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--interactive-accent);
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  transition: transform 0.1s;
+}
+
+.okr-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.okr-slider-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--interactive-accent);
+  min-width: 40px;
+  text-align: right;
+}
+
+/* Modal 底部按钮 */
+.okr-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--background-modifier-border);
+  margin-top: 4px;
+}
+
+.okr-btn-cancel {
+  padding: 6px 16px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.okr-btn-cancel:hover {
+  border-color: var(--text-muted);
+  color: var(--text-normal);
+}
+
+.okr-btn-confirm {
+  padding: 6px 20px;
+  border: none;
+  border-radius: var(--radius-s);
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s, filter 0.15s;
+}
+.okr-btn-confirm:hover { filter: brightness(1.1); }
+.okr-btn-confirm:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: none;
+}
+
+/* ---------- 嵌入式 KR 列表（Markdown 后处理器） ---------- */
+.okr-inline-kr-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin: 12px 0;
+}
+
+.okr-inline-kr-table th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-faint);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0 8px 6px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.okr-inline-kr-table td {
+  padding: 7px 8px;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--background-modifier-border);
+  color: var(--text-normal);
+}
+
+.okr-inline-kr-table tr:last-child td { border-bottom: none; }
+
+.okr-inline-kr-table tr:hover td {
+  background: var(--background-modifier-hover);
+}
+
+.okr-inline-progress-track {
+  height: 4px;
+  width: 80px;
+  background: var(--background-modifier-border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.okr-inline-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+}
+
+/* ---------- Check-in 时间线 ---------- */
+.okr-checkin-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 12px 0;
+  border-left: 2px solid var(--background-modifier-border);
+  padding-left: 14px;
+}
+
+.okr-checkin-entry {
+  position: relative;
+  padding: 0 0 16px;
+}
+
+.okr-checkin-entry::before {
+  content: '';
+  position: absolute;
+  left: -19px;
+  top: 5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--background-modifier-border);
+  border: 2px solid var(--background-primary);
+}
+
+.okr-checkin-entry:first-child::before {
+  background: var(--interactive-accent);
+}
+
+.okr-checkin-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.okr-checkin-date {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.okr-checkin-delta {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.okr-checkin-delta.positive {
+  background: rgba(var(--color-green-rgb), 0.12);
+  color: var(--color-green);
+}
+.okr-checkin-delta.negative {
+  background: rgba(var(--color-red-rgb), 0.12);
+  color: var(--color-red);
+}
+.okr-checkin-delta.neutral {
+  background: var(--background-modifier-border);
+  color: var(--text-faint);
+}
+
+.okr-checkin-progress-text {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.okr-checkin-note {
+  font-size: 12px;
+  color: var(--text-normal);
+  line-height: 1.5;
+}
+
+.okr-checkin-blocker {
+  font-size: 11px;
+  color: var(--color-orange);
+  margin-top: 3px;
+}
+.okr-checkin-blocker::before { content: '⚠ '; }
+
+/* ---------- 响应式（移动端 Obsidian） ---------- */
+@media (max-width: 480px) {
+  .okr-summary-bar { padding: 8px 10px; }
+  .okr-summary-num { font-size: 16px; }
+  .okr-kr-value { display: none; } /* 小屏隐藏 current/target 数字 */
+  .okr-kr-bar-wrap { width: 36px; }
+}
+
+/* ---------- 动画 ---------- */
+@keyframes okr-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.okr-obj-card {
+  animation: okr-fade-in 0.2s ease;
+}
