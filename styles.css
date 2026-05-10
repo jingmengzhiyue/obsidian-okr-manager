@@ -281,6 +281,10 @@
   padding: 4px 0 6px;
 }
 
+.okr-kr-list.is-collapsed {
+  display: none;
+}
+
 .okr-kr-row {
   display: flex;
   align-items: center;
@@ -383,6 +387,32 @@
   color: var(--text-on-accent);
 }
 
+.okr-row-action-btn {
+  border: 1px solid var(--background-modifier-border);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 4px;
+  font-size: 10px;
+  padding: 2px 6px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.okr-kr-row:hover .okr-row-action-btn {
+  opacity: 1;
+}
+
+.okr-row-action-btn:hover {
+  border-color: var(--interactive-accent);
+  color: var(--interactive-accent);
+}
+
+.okr-row-action-danger:hover {
+  border-color: var(--color-red);
+  color: var(--color-red);
+}
+
 /* ---------- 添加 KR 按钮 ---------- */
 .okr-add-kr-row {
   padding: 3px 10px 2px;
@@ -471,6 +501,12 @@
   margin: 0 0 6px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.okr-modal-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: -8px;
 }
 
 .okr-field {
@@ -620,12 +656,59 @@
   filter: none;
 }
 
+.okr-btn-danger {
+  background: var(--color-red);
+}
+
+.okr-confirm-message {
+  margin: 0;
+  color: var(--text-normal);
+  line-height: 1.6;
+}
+
 /* ---------- 嵌入式 KR 列表（Markdown 后处理器） ---------- */
 .okr-inline-kr-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
   margin: 12px 0;
+}
+
+.okr-inline-action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.okr-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.okr-inline-action-btn {
+  width: auto;
+  padding: 4px 10px;
+  border: 1px solid var(--background-modifier-border);
+  background: transparent;
+  border-radius: var(--radius-s);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.okr-inline-action-btn:hover {
+  border-color: var(--interactive-accent);
+  color: var(--interactive-accent);
+  background: rgba(var(--interactive-accent-rgb), 0.06);
+}
+
+.okr-inline-action-danger:hover {
+  border-color: var(--color-red);
+  color: var(--color-red);
+  background: rgba(var(--color-red-rgb), 0.08);
 }
 
 .okr-inline-kr-table th {

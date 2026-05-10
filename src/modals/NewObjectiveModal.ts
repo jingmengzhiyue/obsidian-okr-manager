@@ -1,6 +1,7 @@
 import { App, Modal, Notice, TFile } from "obsidian";
 import { OKRManager } from "../manager/OKRManager";
 import { OKRPeriodType } from "../types";
+import { getTodayLocalDate } from "../utils/date";
 
 export class NewObjectiveModal extends Modal {
 	private period: string = "";
@@ -24,7 +25,7 @@ export class NewObjectiveModal extends Modal {
 	}
 
 	onOpen(): void {
-		super.onOpen();
+		void super.onOpen();
 		const { contentEl } = this;
 		contentEl.empty();
 		this.modalEl.addClass("okr-modal");
@@ -35,7 +36,7 @@ export class NewObjectiveModal extends Modal {
 
 		contentEl.createEl("h2", {
 			cls: "okr-modal-title",
-			text: "新建 Objective",
+			text: "新建目标",
 		});
 
 		const periodTypeField = contentEl.createDiv("okr-field");
@@ -54,7 +55,7 @@ export class NewObjectiveModal extends Modal {
 		const periodInput = periodField.createEl("input", {
 			cls: "okr-input",
 			type: "text",
-			attr: { placeholder: "例如：2026-Q2" },
+			attr: { placeholder: "请输入周期" },
 		});
 		periodInput.value = this.period;
 		const periodHint = periodField.createEl("div", {
@@ -191,7 +192,7 @@ export class NewObjectiveModal extends Modal {
 		this.isSubmitting = true;
 		this.validate();
 		try {
-			const today = new Date().toISOString().split("T")[0] ?? "";
+			const today = getTodayLocalDate();
 			const obj = await this.manager.createObjective({
 				period: this.period,
 				periodType: this.periodType,

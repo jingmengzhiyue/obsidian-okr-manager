@@ -30,6 +30,7 @@ import {
 	OKR_TYPE_OBJECTIVE,
 	PERIOD_PATTERN,
 } from "../constants";
+import { compareKeyResultIds, compareObjectiveIds } from "../utils/sort";
 
 interface PeriodCacheEntry {
 	objectives: Objective[];
@@ -170,7 +171,7 @@ export class OKRManager {
 		);
 		return nested
 			.flat()
-			.sort((left, right) => left.id.localeCompare(right.id));
+			.sort((left, right) => compareKeyResultIds(left.id, right.id));
 	}
 
 	async getCheckIns(krId: string): Promise<CheckIn[]> {
@@ -324,6 +325,105 @@ export class OKRManager {
 		return keyResult;
 	}
 
+	async updateObjective(
+		objectiveId: string,
+		period: string,
+		updates: Pick<
+			Objective,
+			"title" | "description" | "owner" | "status" | "due"
+		>,
+	): Promise<Objective> {
+		const entry = await this.findObjectiveEntry(objectiveId, period);
+		if (!entry) {
+			throw new Error(`找不到 Objective：${objectiveId}`);
+		}
+
+		const updatedObjective: Objective = {
+			...entry.objective,
+			title: updates.title.trim(),
+			description: updates.description.trim(),
+			owner: updates.owner.trim(),
+			status: updates.status,
+			due: updates.due,
+		};
+		updatedObjective.progress = this.parser.calculateObjectiveProgress(
+			updatedObjective.keyResults,
+		);
+
+		await this.writeObjective(entry.file, updatedObjective);
+		this.cache.delete(updatedObjective.period);
+		return updatedObjective;
+	}
+
+	async updateKeyResult(
+		krId: string,
+		period: string,
+		updates: Pick<
+			KeyResult,
+			| "title"
+			| "description"
+			| "owner"
+			| "unit"
+			| "current"
+			| "target"
+			| "status"
+			| "confidence"
+			| "due"
+		>,
+	): Promise<KeyResult> {
+		const found = await this.findObjectiveEntryByKRId(
+			krId,
+			this.normalizePeriod(period),
+		);
+		if (!found) {
+			throw new Error(`找不到 Key Result：${krId}`);
+		}
+
+		let updatedKeyResult: KeyResult | null = null;
+		const updatedKeyResults = found.objective.keyResults.map((item) => {
+			if (item.id !== krId) {
+				return item;
+			}
+
+			const progress = this.settings.autoComputeProgress
+				? this.parser.calculateKRProgress(
+						updates.current,
+						updates.target,
+						updates.unit,
+					)
+				: this.parser.clampProgress(item.progress);
+			updatedKeyResult = {
+				...item,
+				title: updates.title.trim(),
+				description: updates.description.trim(),
+				owner: updates.owner.trim(),
+				unit: updates.unit,
+				current: updates.current,
+				target: updates.target,
+				progress,
+				status: updates.status,
+				confidence: updates.confidence,
+				due: updates.due,
+			};
+			return updatedKeyResult;
+		});
+		if (!updatedKeyResult) {
+			throw new Error(`找不到 Key Result：${krId}`);
+		}
+
+		const updatedObjective: Objective = {
+			...found.objective,
+			keyResults: updatedKeyResults,
+		};
+		updatedObjective.progress = this.parser.calculateObjectiveProgress(
+			updatedObjective.keyResults,
+		);
+
+		await this.writeObjective(found.file, updatedObjective);
+		this.cache.delete(updatedObjective.period);
+		return updatedKeyResult;
+	}
+
 	async recordCheckIn(params: Omit<CheckIn, "filePath">): Promise<void> {
 		const found = await this.findObjectiveEntryByKRId(params.krId);
 		if (!found) {
@@ -457,13 +557,45 @@ export class OKRManager {
 		period: string,
 		_deleteKRs: boolean,
 	): Promise<void> {
-		const file = await this.findObjectiveFile(objectiveId, period);
-		if (!file) {
-			return;
+		const entry = await this.findObjectiveEntry(objectiveId, period);
+		if (!entry) {
+			throw new Error(`找不到要删除的目标：${objectiveId}`);
 		}
 
-		await this.app.vault.trash(file, true);
+		await this.deleteCheckInsForKrIds(
+			entry.objective.keyResults.map((keyResult) => keyResult.id),
+		);
+		await this.app.fileManager.trashFile(entry.file);
 		this.cache.delete(this.normalizePeriod(period));
+	}
+
+	async deleteKeyResult(krId: string, period: string): Promise<void> {
+		const found = await this.findObjectiveEntryByKRId(
+			krId,
+			this.normalizePeriod(period),
+		);
+		if (!found) {
+			throw new Error(`找不到要删除的关键结果：${krId}`);
+		}
+
+		const updatedKeyResults = found.objective.keyResults.filter(
+			(item) => item.id !== krId,
+		);
+		if (updatedKeyResults.length === found.objective.keyResults.length) {
+			throw new Error(`找不到要删除的关键结果：${krId}`);
+		}
+
+		const updatedObjective: Objective = {
+			...found.objective,
+			keyResults: updatedKeyResults,
+		};
+		updatedObjective.progress = this.parser.calculateObjectiveProgress(
+			updatedObjective.keyResults,
+		);
+
+		await this.writeObjective(found.file, updatedObjective);
+		await this.deleteCheckInsForKrIds([krId]);
+		this.cache.delete(updatedObjective.period);
 	}
 
 	private async loadObjectivesForPeriod(
@@ -492,7 +624,7 @@ export class OKRManager {
 
 		const objectives = parsed
 			.filter((item): item is Objective => item !== null)
-			.sort((left, right) => left.id.localeCompare(right.id));
+			.sort((left, right) => compareObjectiveIds(left.id, right.id));
 		const entry = this.ensureCacheEntry(period);
 		entry.objectives = objectives;
 		entry.keyResultsByObjective = new Map(
@@ -604,6 +736,30 @@ export class OKRManager {
 			normalizePath(`${periodDir}/${objectiveId}.md`),
 		);
 		return candidate instanceof TFile ? candidate : null;
+	}
+
+	private async deleteCheckInsForKrIds(krIds: string[]): Promise<void> {
+		if (krIds.length === 0) {
+			return;
+		}
+
+		const krIdSet = new Set(krIds);
+		const files = this.getCheckInFiles().filter((file) => {
+			const basename = file.basename;
+			return [...krIdSet].some(
+				(krId) => basename.endsWith(`-${krId}`) || basename === krId,
+			);
+		});
+		await Promise.all(
+			files.map(async (file) => {
+				await this.app.fileManager.trashFile(file);
+			}),
+		);
+		for (const entry of this.cache.values()) {
+			for (const krId of krIdSet) {
+				entry.checkIns.delete(krId);
+			}
+		}
 	}
 
 	private async writeObjective(

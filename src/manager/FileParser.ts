@@ -36,6 +36,8 @@ import {
 	WEEK_PERIOD_PATTERN,
 	YEAR_PERIOD_PATTERN,
 } from "../constants";
+import { formatLocalDate } from "../utils/date";
+import { compareKeyResultIds } from "../utils/sort";
 
 export class FileParser {
 	constructor(private app: App) {}
@@ -154,7 +156,7 @@ export class FileParser {
 				break;
 		}
 
-		return endDate.toISOString().split("T")[0] ?? "";
+		return formatLocalDate(endDate);
 	}
 
 	formatPeriodLabel(period: string, periodType?: OKRPeriodType): string {
@@ -341,15 +343,19 @@ export class FileParser {
 				this.parseKeyResultEntry(item, context, index + 1),
 			)
 			.filter((item): item is KeyResult => item !== null)
-			.sort((left, right) => left.id.localeCompare(right.id));
+			.sort((left, right) => compareKeyResultIds(left.id, right.id));
 	}
 
 	private parseString(value: unknown, fallback = ""): string {
-		return typeof value === "string"
-			? value
-			: value == null
-				? fallback
-				: String(value);
+		if (typeof value === "string") {
+			return value;
+		}
+
+		if (typeof value === "number" || typeof value === "boolean") {
+			return String(value);
+		}
+
+		return fallback;
 	}
 
 	private parseNumber(value: unknown, fallback = 0): number {

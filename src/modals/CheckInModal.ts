@@ -1,6 +1,7 @@
 import { App, Modal, Notice } from "obsidian";
 import { OKRManager } from "../manager/OKRManager";
 import { KeyResult } from "../types";
+import { getTodayLocalDate } from "../utils/date";
 
 interface CheckInModalOptions {
 	prefillKrId?: string;
@@ -25,18 +26,18 @@ export class CheckInModal extends Modal {
 	) {
 		super(app);
 		this.krId = options.prefillKrId ?? "";
-		this.date = new Date().toISOString().split("T")[0]!;
+		this.date = getTodayLocalDate();
 	}
 
 	async onOpen(): Promise<void> {
-		super.onOpen();
+		await super.onOpen();
 		const { contentEl } = this;
 		contentEl.empty();
 		this.modalEl.addClass("okr-modal");
 
 		contentEl.createEl("h2", {
 			cls: "okr-modal-title",
-			text: "记录 Check-in",
+			text: "记录进度",
 		});
 
 		this.krs = await this.loadAllKeyResults();
@@ -48,11 +49,19 @@ export class CheckInModal extends Modal {
 		const krField = contentEl.createDiv("okr-field");
 		this.createRequiredLabel(krField, "Key Result");
 		const krSelect = krField.createEl("select", { cls: "okr-select" });
-		for (const kr of this.krs) {
+		if (this.krs.length === 0) {
 			krSelect.createEl("option", {
-				text: `${kr.id} ${kr.title}`,
-				value: kr.id,
+				text: "暂无可记录的关键结果",
+				value: "",
 			});
+			krSelect.disabled = true;
+		} else {
+			for (const kr of this.krs) {
+				krSelect.createEl("option", {
+					text: `${kr.id} ${kr.title}`,
+					value: kr.id,
+				});
+			}
 		}
 		krSelect.value = this.krId;
 		krSelect.addEventListener("change", () => {
@@ -212,6 +221,7 @@ export class CheckInModal extends Modal {
 				!this.isSubmitting &&
 				this.krId.length > 0 &&
 				this.date.length > 0 &&
+				this.krs.length > 0 &&
 				!currentInput.hasClass("okr-invalid") &&
 				!progressInput.hasClass("okr-invalid");
 			confirmBtn.disabled = !valid;

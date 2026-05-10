@@ -1,99 +1,55 @@
-import { App, Modal, Notice, TFile } from "obsidian";
+import { App, Modal, Notice } from "obsidian";
 import { OKRManager } from "../manager/OKRManager";
-import { Confidence } from "../types";
-import { getTodayLocalDate } from "../utils/date";
+import { Confidence, KeyResult } from "../types";
 
-interface NewKRModalOptions {
-	initialPeriod?: string;
-	initialObjectiveId?: string;
+interface EditKRModalOptions {
 	onComplete?: () => void;
 }
 
-export class NewKRModal extends Modal {
-	private period: string = "";
-	private objectiveId: string = "";
-	private title: string = "";
-	private owner: string = "";
-	private unit: "score" | "percentage" | "number" | "boolean" = "score";
-	private current = 0;
-	private target: number = 0;
-	private confidence: Confidence = "medium";
-	private due: string = "";
-	private description: string = "";
-	private objectives: { id: string; title: string }[] = [];
+export class EditKRModal extends Modal {
+	private titleValue: string;
+	private owner: string;
+	private unit: KeyResult["unit"];
+	private current: number;
+	private target: number;
+	private confidence: Confidence;
+	private due: string;
+	private description: string;
+	private status: KeyResult["status"];
 	private isSubmitting = false;
 	private validate!: () => void;
 
 	constructor(
 		app: App,
 		private manager: OKRManager,
-		private options: NewKRModalOptions = {},
+		private keyResult: KeyResult,
+		private options: EditKRModalOptions = {},
 	) {
 		super(app);
+		this.titleValue = keyResult.title;
+		this.owner = keyResult.owner;
+		this.unit = keyResult.unit;
+		this.current = keyResult.current;
+		this.target = keyResult.target;
+		this.confidence = keyResult.confidence;
+		this.due = keyResult.due;
+		this.description = keyResult.description;
+		this.status = keyResult.status;
 	}
 
-	async onOpen(): Promise<void> {
-		await super.onOpen();
+	onOpen(): void {
+		void super.onOpen();
 		const { contentEl } = this;
 		contentEl.empty();
 		this.modalEl.addClass("okr-modal");
 
-		const today = getTodayLocalDate();
-		this.period =
-			this.options.initialPeriod ||
-			this.manager
-				.getParser()
-				.getCurrentPeriod(this.manager.getSettings().defaultPeriodType);
-		this.due = today;
-
-		await this.loadObjectives();
-		if (
-			this.options.initialObjectiveId &&
-			this.objectives.some(
-				(objective) => objective.id === this.options.initialObjectiveId,
-			)
-		) {
-			this.objectiveId = this.options.initialObjectiveId;
-		} else if (this.objectives.length > 0) {
-			this.objectiveId = this.objectives[0]?.id ?? "";
-		}
-
 		contentEl.createEl("h2", {
 			cls: "okr-modal-title",
-			text: "新建关键结果",
+			text: `编辑 Key Result ${this.keyResult.id}`,
 		});
-
-		const periodField = contentEl.createDiv("okr-field");
-		this.createRequiredLabel(periodField, "周期");
-		const periodSelect = periodField.createEl("select", {
-			cls: "okr-select",
-		});
-		const allPeriods = await this.manager.getAllPeriods();
-		if (!allPeriods.includes(this.period)) {
-			periodSelect.createEl("option", {
-				text: this.period,
-				value: this.period,
-			});
-		}
-		for (const p of allPeriods) {
-			periodSelect.createEl("option", {
-				text: this.manager.getParser().formatPeriodLabel(p),
-				value: p,
-			});
-		}
-		periodSelect.value = this.period;
-		periodSelect.addEventListener("change", () => {
-			void this.handlePeriodChange(periodSelect.value, objSelect);
-		});
-
-		const objField = contentEl.createDiv("okr-field");
-		this.createRequiredLabel(objField, "所属 Objective");
-		const objSelect = objField.createEl("select", { cls: "okr-select" });
-		this.renderObjectiveOptions(objSelect);
-		objSelect.value = this.objectiveId;
-		objSelect.addEventListener("change", () => {
-			this.objectiveId = objSelect.value;
-			this.validate();
+		contentEl.createEl("div", {
+			cls: "okr-modal-subtitle",
+			text: `所属 Objective：${this.keyResult.objectiveId}`,
 		});
 
 		const titleField = contentEl.createDiv("okr-field");
@@ -101,10 +57,10 @@ export class NewKRModal extends Modal {
 		const titleInput = titleField.createEl("input", {
 			cls: "okr-input",
 			type: "text",
-			placeholder: "例如：NPS 提升至 60",
 		});
+		titleInput.value = this.titleValue;
 		titleInput.addEventListener("input", () => {
-			this.title = titleInput.value.trim();
+			this.titleValue = titleInput.value.trim();
 			this.validate();
 		});
 
@@ -114,9 +70,24 @@ export class NewKRModal extends Modal {
 			cls: "okr-input",
 			type: "text",
 		});
+		ownerInput.value = this.owner;
 		ownerInput.addEventListener("input", () => {
 			this.owner = ownerInput.value.trim();
 			this.validate();
+		});
+
+		const statusField = contentEl.createDiv("okr-field");
+		statusField.createEl("label", { cls: "okr-label", text: "状态" });
+		const statusSelect = statusField.createEl("select", {
+			cls: "okr-select",
+		});
+		statusSelect.createEl("option", { text: "进行中", value: "active" });
+		statusSelect.createEl("option", { text: "已完成", value: "completed" });
+		statusSelect.createEl("option", { text: "暂停中", value: "on-hold" });
+		statusSelect.createEl("option", { text: "已取消", value: "cancelled" });
+		statusSelect.value = this.status;
+		statusSelect.addEventListener("change", () => {
+			this.status = statusSelect.value as KeyResult["status"];
 		});
 
 		const unitField = contentEl.createDiv("okr-field");
@@ -137,7 +108,7 @@ export class NewKRModal extends Modal {
 		});
 		unitSelect.value = this.unit;
 		unitSelect.addEventListener("change", () => {
-			this.unit = unitSelect.value as typeof this.unit;
+			this.unit = unitSelect.value as KeyResult["unit"];
 		});
 
 		const currentField = contentEl.createDiv("okr-field");
@@ -145,10 +116,10 @@ export class NewKRModal extends Modal {
 		const currentInput = currentField.createEl("input", {
 			cls: "okr-input",
 			type: "number",
-			placeholder: "0",
 		});
 		currentInput.setAttribute("min", "0");
 		currentInput.setAttribute("step", "any");
+		currentInput.value = String(this.current);
 		const currentError = currentField.createEl("div", {
 			cls: "okr-input-error",
 			text: "当前值必须是大于等于 0 的数字",
@@ -173,10 +144,10 @@ export class NewKRModal extends Modal {
 		const targetInput = targetField.createEl("input", {
 			cls: "okr-input",
 			type: "number",
-			placeholder: "0",
 		});
 		targetInput.setAttribute("min", "0");
 		targetInput.setAttribute("step", "any");
+		targetInput.value = String(this.target);
 		const targetError = targetField.createEl("div", {
 			cls: "okr-input-error",
 			text: "目标值必须是大于等于 0 的数字",
@@ -223,8 +194,8 @@ export class NewKRModal extends Modal {
 		descField.createEl("label", { cls: "okr-label", text: "描述" });
 		const descInput = descField.createEl("textarea", {
 			cls: "okr-textarea",
-			placeholder: "详细说明...",
 		});
+		descInput.value = this.description;
 		descInput.addEventListener("input", () => {
 			this.description = descInput.value.trim();
 		});
@@ -238,130 +209,68 @@ export class NewKRModal extends Modal {
 
 		const confirmBtn = footer.createEl("button", {
 			cls: "okr-btn-confirm",
-			text: "创建",
-			attr: { disabled: "true", type: "button" },
+			text: "保存",
+			attr: { type: "button" },
 		});
 		confirmBtn.addEventListener("click", () => {
 			void this.submit();
 		});
 
 		this.validate = () => {
-			const valid =
-				!this.isSubmitting &&
-				this.period.length > 0 &&
-				this.objectiveId.length > 0 &&
-				this.title.length > 0 &&
-				this.owner.length > 0 &&
-				this.due.length > 0 &&
-				targetInput.value.length > 0 &&
-				!targetInput.hasClass("okr-invalid") &&
-				!currentInput.hasClass("okr-invalid");
-			confirmBtn.disabled = !valid;
+			confirmBtn.disabled =
+				this.isSubmitting ||
+				this.titleValue.length === 0 ||
+				this.owner.length === 0 ||
+				this.due.length === 0 ||
+				targetInput.value.length === 0 ||
+				targetInput.hasClass("okr-invalid") ||
+				currentInput.hasClass("okr-invalid");
 		};
 		this.validate();
+	}
 
-		this.modalEl.addEventListener("keydown", (e) => {
-			if (e.key === "Escape") {
-				this.close();
-				return;
-			}
-
-			if (e.key === "Enter" && document.activeElement !== descInput) {
-				e.preventDefault();
-				void this.submit();
-			}
-		});
+	onClose(): void {
+		super.onClose();
+		this.contentEl.empty();
 	}
 
 	private async submit(): Promise<void> {
 		this.validate();
-		if (this.isSubmitting || !this.objectiveId || !this.title) {
+		if (this.isSubmitting || !this.titleValue || !this.owner || !this.due) {
 			return;
 		}
 
 		this.isSubmitting = true;
 		this.validate();
 		try {
-			const today = getTodayLocalDate();
-			const kr = await this.manager.createKeyResult({
-				objectiveId: this.objectiveId,
-				period: this.period,
-				title: this.title,
-				description: this.description,
-				owner: this.owner,
-				unit: this.unit,
-				current: this.current,
-				target: this.target,
-				status: "active",
-				confidence: this.confidence,
-				created: today,
-				due: this.due,
-			});
-
-			const file = this.app.vault.getAbstractFileByPath(kr.filePath);
-			if (file instanceof TFile) {
-				await this.app.workspace.openLinkText(file.path, "", false);
-			}
-
-			new Notice(`已创建 Key Result：${kr.title}`);
+			const updated = await this.manager.updateKeyResult(
+				this.keyResult.id,
+				this.keyResult.period,
+				{
+					title: this.titleValue,
+					description: this.description,
+					owner: this.owner,
+					unit: this.unit,
+					current: this.current,
+					target: this.target,
+					status: this.status,
+					confidence: this.confidence,
+					due: this.due,
+				},
+			);
+			new Notice(`已更新 Key Result：${updated.title}`);
 			this.options.onComplete?.();
 			this.close();
 		} catch (error) {
 			new Notice(
 				error instanceof Error
-					? `创建 Key Result 失败：${error.message}`
-					: "创建 Key Result 失败",
+					? `更新 Key Result 失败：${error.message}`
+					: "更新 Key Result 失败",
 			);
 		} finally {
 			this.isSubmitting = false;
 			this.validate();
 		}
-	}
-
-	onClose(): void {
-		super.onClose();
-		const { contentEl } = this;
-		contentEl.empty();
-	}
-
-	private async loadObjectives(): Promise<void> {
-		const objectives = await this.manager.getObjectives(this.period);
-		this.objectives = objectives.map((objective) => ({
-			id: objective.id,
-			title: `${objective.id} ${objective.title}`,
-		}));
-	}
-
-	private async handlePeriodChange(
-		period: string,
-		select: HTMLSelectElement,
-	): Promise<void> {
-		this.period = period;
-		await this.loadObjectives();
-		this.objectiveId = this.objectives[0]?.id ?? "";
-		this.renderObjectiveOptions(select);
-		this.validate();
-	}
-
-	private renderObjectiveOptions(select: HTMLSelectElement): void {
-		select.empty();
-		if (this.objectives.length === 0) {
-			select.createEl("option", {
-				text: "当前周期暂无目标",
-				value: "",
-			});
-			select.disabled = true;
-			return;
-		}
-
-		select.disabled = false;
-		for (const objective of this.objectives) {
-			select.createEl("option", {
-				text: objective.title,
-				value: objective.id,
-			});
-		}
-		select.value = this.objectiveId;
 	}
 
 	private createRequiredLabel(container: HTMLElement, text: string): void {

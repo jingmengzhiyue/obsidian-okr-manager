@@ -1,6 +1,16 @@
-import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
+import {
+	ItemView,
+	Menu,
+	Notice,
+	TFile,
+	WorkspaceLeaf,
+	setIcon,
+} from "obsidian";
 import { OKRManager } from "../manager/OKRManager";
 import { CheckInModal } from "../modals/CheckInModal";
+import { ConfirmModal } from "../modals/ConfirmModal";
+import { EditKRModal } from "../modals/EditKRModal";
+import { EditObjectiveModal } from "../modals/EditObjectiveModal";
 import { NewKRModal } from "../modals/NewKRModal";
 import { NewObjectiveModal } from "../modals/NewObjectiveModal";
 import { KeyResult, Objective } from "../types";
@@ -26,7 +36,7 @@ export class DashboardView extends ItemView {
 		return DASHBOARD_VIEW_TYPE;
 	}
 	getDisplayText(): string {
-		return "OKR Dashboard";
+		return "仪表盘";
 	}
 	getIcon(): string {
 		return "target";
@@ -129,8 +139,8 @@ export class DashboardView extends ItemView {
 			cls: "okr-btn-icon",
 			text: "＋",
 		});
-		addButton.setAttribute("aria-label", "新建 Objective");
-		addButton.setAttribute("title", "新建 Objective");
+		addButton.setAttribute("title", "新建目标");
+		addButton.setAttribute("aria-label", "新建目标");
 		addButton.addEventListener("click", () => this.openNewObjectiveModal());
 	}
 
@@ -201,7 +211,7 @@ export class DashboardView extends ItemView {
 			cls: `okr-collapse-btn${isCollapsed ? " okr-collapsed" : ""}`,
 		});
 		collapseBtn.setAttribute("aria-label", isCollapsed ? "展开" : "折叠");
-		collapseBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
+		setIcon(collapseBtn, "chevron-right");
 		collapseBtn.addEventListener("click", (event) => {
 			event.stopPropagation();
 			if (this.collapsedObjs.has(obj.id)) {
@@ -244,7 +254,10 @@ export class DashboardView extends ItemView {
 			text: "⋯",
 		});
 		moreBtn.setAttribute("aria-label", "更多操作");
-		moreBtn.disabled = true;
+		moreBtn.addEventListener("click", (event) => {
+			event.stopPropagation();
+			this.openObjectiveMenu(event, obj);
+		});
 
 		this.renderProgressBar(
 			card,
@@ -256,7 +269,7 @@ export class DashboardView extends ItemView {
 
 		const krList = card.createDiv("okr-kr-list");
 		if (isCollapsed) {
-			krList.style.display = "none";
+			krList.addClass("is-collapsed");
 		}
 
 		const keyResults = this.krsMap.get(obj.id) ?? [];
@@ -324,12 +337,44 @@ export class DashboardView extends ItemView {
 			text: "↑",
 		});
 		checkInButton.setAttribute("aria-label", "记录进度");
-		checkInButton.setAttribute("title", "记录 Check-in");
+		checkInButton.setAttribute("title", "记录进度");
 		checkInButton.addEventListener("click", (event) => {
 			event.stopPropagation();
 			new CheckInModal(this.app, this.manager, {
 				prefillKrId: kr.id,
 				onComplete: () => this.scheduleRender(),
+			}).open();
+		});
+
+		const editButton = right.createEl("button", {
+			cls: "okr-row-action-btn",
+			text: "编辑",
+		});
+		editButton.setAttribute("aria-label", "编辑关键结果");
+		editButton.addEventListener("click", (event) => {
+			event.stopPropagation();
+			new EditKRModal(this.app, this.manager, kr, {
+				onComplete: () => this.scheduleRender(),
+			}).open();
+		});
+
+		const deleteButton = right.createEl("button", {
+			cls: "okr-row-action-btn okr-row-action-danger",
+			text: "删除",
+		});
+		deleteButton.setAttribute("aria-label", "删除关键结果");
+		deleteButton.addEventListener("click", (event) => {
+			event.stopPropagation();
+			new ConfirmModal(this.app, {
+				title: `删除 ${kr.id}`,
+				message: `确认删除关键结果「${kr.title}」及其全部进度记录吗？`,
+				confirmText: "删除",
+				errorNotice: `删除关键结果失败：${kr.title}`,
+				onConfirm: async () => {
+					await this.manager.deleteKeyResult(kr.id, kr.period);
+					new Notice(`已删除关键结果：${kr.title}`);
+					this.scheduleRender();
+				},
 			}).open();
 		});
 	}
@@ -359,7 +404,7 @@ export class DashboardView extends ItemView {
 		empty.createEl("div", { cls: "okr-empty-icon", text: "◎" });
 		empty.createEl("div", {
 			cls: "okr-empty-text",
-			text: "当前周期暂无 OKR\n点击下方按钮创建第一个目标",
+			text: "当前周期暂无目标\n点击下方按钮创建第一个目标",
 		});
 		const button = empty.createEl("button", {
 			cls: "okr-empty-btn",
@@ -382,7 +427,7 @@ export class DashboardView extends ItemView {
 		empty.createEl("div", { cls: "okr-empty-icon", text: "!" });
 		empty.createEl("div", {
 			cls: "okr-empty-text",
-			text: "OKR Dashboard 加载失败\n请稍后重试或检查控制台日志",
+			text: "仪表盘加载失败\n请稍后重试或检查控制台日志",
 		});
 	}
 
@@ -390,6 +435,45 @@ export class DashboardView extends ItemView {
 		new NewObjectiveModal(this.app, this.manager, () =>
 			this.scheduleRender(),
 		).open();
+	}
+
+	private openObjectiveMenu(event: MouseEvent, objective: Objective): void {
+		const menu = new Menu();
+		menu.addItem((item) =>
+			item.setTitle("打开详情").onClick(() => {
+				void this.openFile(
+					objective.filePath,
+					"Objective 文件不存在，可能已被手动删除",
+				);
+			}),
+		);
+		menu.addItem((item) =>
+			item.setTitle("编辑目标").onClick(() => {
+				new EditObjectiveModal(this.app, this.manager, objective, {
+					onComplete: () => this.scheduleRender(),
+				}).open();
+			}),
+		);
+		menu.addItem((item) =>
+			item.setTitle("删除目标").onClick(() => {
+				new ConfirmModal(this.app, {
+					title: `删除 ${objective.id}`,
+					message: `确认删除目标「${objective.title}」、其全部关键结果以及关联进度记录吗？`,
+					confirmText: "删除",
+					errorNotice: `删除目标失败：${objective.title}`,
+					onConfirm: async () => {
+						await this.manager.deleteObjective(
+							objective.id,
+							objective.period,
+							true,
+						);
+						new Notice(`已删除目标：${objective.title}`);
+						this.scheduleRender();
+					},
+				}).open();
+			}),
+		);
+		menu.showAtMouseEvent(event);
 	}
 
 	private async openFile(

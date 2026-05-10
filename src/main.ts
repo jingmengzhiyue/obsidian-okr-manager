@@ -51,7 +51,7 @@ export default class OKRPlugin extends Plugin {
 		// 注册 Commands
 		this.addCommand({
 			id: "okr-new-objective",
-			name: "新建 Objective",
+			name: "新建目标",
 			callback: () =>
 				new NewObjectiveModal(this.app, this.manager, () =>
 					this.refreshDashboard(),
@@ -59,7 +59,7 @@ export default class OKRPlugin extends Plugin {
 		});
 		this.addCommand({
 			id: "okr-new-kr",
-			name: "新建 Key Result",
+			name: "新建关键结果",
 			callback: () =>
 				new NewKRModal(this.app, this.manager, {
 					onComplete: () => this.refreshDashboard(),
@@ -67,7 +67,7 @@ export default class OKRPlugin extends Plugin {
 		});
 		this.addCommand({
 			id: "okr-check-in",
-			name: "记录 Check-in 进度",
+			name: "记录进度",
 			callback: () =>
 				new CheckInModal(this.app, this.manager, {
 					onComplete: () => this.refreshDashboard(),
@@ -75,12 +75,12 @@ export default class OKRPlugin extends Plugin {
 		});
 		this.addCommand({
 			id: "okr-open-dashboard",
-			name: "打开 OKR Dashboard",
+			name: "打开仪表盘",
 			callback: () => this.activateDashboard(),
 		});
 
 		// Ribbon 图标
-		this.addRibbonIcon("target", "OKR Dashboard", () =>
+		this.addRibbonIcon("target", "打开仪表盘", () =>
 			this.activateDashboard(),
 		);
 
@@ -89,7 +89,9 @@ export default class OKRPlugin extends Plugin {
 
 		// 启动时自动打开 Dashboard
 		if (this.settings.showDashboardOnStartup) {
-			this.app.workspace.onLayoutReady(() => this.activateDashboard());
+			this.app.workspace.onLayoutReady(() => {
+				void this.activateDashboard();
+			});
 		}
 	}
 
@@ -107,7 +109,7 @@ export default class OKRPlugin extends Plugin {
 		const targetLeaves =
 			this.app.workspace.getLeavesOfType(DASHBOARD_VIEW_TYPE);
 		if (targetLeaves.length > 0) {
-			this.app.workspace.revealLeaf(targetLeaves[0]!);
+			void this.app.workspace.revealLeaf(targetLeaves[0]!);
 		}
 	}
 
@@ -122,8 +124,12 @@ export default class OKRPlugin extends Plugin {
 	}
 
 	async loadSettings(): Promise<void> {
-		const loaded = await this.loadData();
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
+		const loaded =
+			(await this.loadData()) as Partial<OKRPluginSettings> | null;
+		this.settings = {
+			...DEFAULT_SETTINGS,
+			...(loaded ?? {}),
+		};
 		if (!this.settings.defaultPeriodType) {
 			this.settings.defaultPeriodType = "quarter";
 		}
