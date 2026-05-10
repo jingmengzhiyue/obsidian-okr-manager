@@ -74,30 +74,34 @@ export class OKRManager {
 		this.clearAllCache();
 	}
 
-	invalidateCacheForFile(file: TAbstractFile): void {
+	invalidateCacheForFile(file: TAbstractFile): boolean {
 		const path = normalizePath(file.path);
 		if (path.startsWith(this.getCheckInsDirPrefix())) {
 			this.invalidateCheckInCache(path);
-			return;
+			return true;
 		}
 
 		const period = this.extractPeriodFromPath(path);
 		if (period) {
 			this.cache.delete(period);
+			return true;
 		}
+		return false;
 	}
 
-	invalidateCacheByPath(oldPath: string): void {
+	invalidateCacheByPath(oldPath: string): boolean {
 		const normalized = normalizePath(oldPath);
 		if (normalized.startsWith(this.getCheckInsDirPrefix())) {
 			this.invalidateCheckInCache(normalized);
-			return;
+			return true;
 		}
 
 		const period = this.extractPeriodFromPath(normalized);
 		if (period) {
 			this.cache.delete(period);
+			return true;
 		}
+		return false;
 	}
 
 	clearAllCache(): void {

@@ -1,4 +1,4 @@
-import { Plugin, TAbstractFile } from "obsidian";
+import { Plugin, TAbstractFile, TFile } from "obsidian";
 import { OKRPluginSettings, DEFAULT_SETTINGS } from "./types";
 import { OKRManager } from "./manager/OKRManager";
 import { DashboardView, DASHBOARD_VIEW_TYPE } from "./views/DashboardView";
@@ -18,21 +18,33 @@ export default class OKRPlugin extends Plugin {
 
 		// 注册缓存失效事件（通过 registerEvent 确保插件禁用时自动清理）
 		this.registerEvent(
-			this.app.vault.on("modify", (file: TAbstractFile) =>
-				this.manager.invalidateCacheForFile(file),
-			),
+			this.app.metadataCache.on("changed", (file: TFile) => {
+				if (this.manager.invalidateCacheForFile(file)) {
+					this.refreshDashboard();
+				}
+			}),
 		);
 		this.registerEvent(
-			this.app.vault.on("delete", (file: TAbstractFile) =>
-				this.manager.invalidateCacheForFile(file),
-			),
+			this.app.vault.on("delete", (file: TAbstractFile) => {
+				if (this.manager.invalidateCacheForFile(file)) {
+					this.refreshDashboard();
+				}
+			}),
 		);
 		this.registerEvent(
 			this.app.vault.on(
 				"rename",
 				(file: TAbstractFile, oldPath: string) => {
-					this.manager.invalidateCacheByPath(oldPath);
-					this.manager.invalidateCacheForFile(file);
+					let invalidated = false;
+					if (this.manager.invalidateCacheByPath(oldPath)) {
+						invalidated = true;
+					}
+					if (this.manager.invalidateCacheForFile(file)) {
+						invalidated = true;
+					}
+					if (invalidated) {
+						this.refreshDashboard();
+					}
 				},
 			),
 		);
