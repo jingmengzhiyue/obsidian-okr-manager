@@ -89,8 +89,8 @@ export class DashboardView extends ItemView {
 		} catch (error) {
 			new Notice(
 				error instanceof Error
-					? `加载 Dashboard 失败：${error.message}`
-					: "加载 Dashboard 失败",
+					? `加载仪表盘失败：${error.message}`
+					: "加载仪表盘失败",
 			);
 			this.renderErrorState(container);
 		}
@@ -273,9 +273,9 @@ export class DashboardView extends ItemView {
 		}
 
 		const keyResults = this.krsMap.get(obj.id) ?? [];
-		for (const keyResult of keyResults) {
-			this.renderKRRow(krList, keyResult);
-		}
+		keyResults.forEach((keyResult, index) => {
+			this.renderKRRow(krList, keyResult, index, keyResults.length);
+		});
 
 		const addKrRow = krList.createDiv("okr-add-kr-row");
 		const addKrBtn = addKrRow.createEl("button", {
@@ -291,7 +291,12 @@ export class DashboardView extends ItemView {
 		});
 	}
 
-	private renderKRRow(container: HTMLElement, kr: KeyResult): void {
+	private renderKRRow(
+		container: HTMLElement,
+		kr: KeyResult,
+		index: number,
+		total: number,
+	): void {
 		const row = container.createDiv("okr-kr-row");
 		row.setAttribute("data-kr-id", kr.id);
 		row.addEventListener("click", () => {
@@ -356,6 +361,48 @@ export class DashboardView extends ItemView {
 			new EditKRModal(this.app, this.manager, kr, {
 				onComplete: () => this.scheduleRender(),
 			}).open();
+		});
+
+		const moveUpButton = right.createEl("button", {
+			cls: "okr-row-action-btn",
+			text: "上移",
+		});
+		moveUpButton.setAttribute("aria-label", "上移关键结果");
+		moveUpButton.disabled = index === 0;
+		moveUpButton.addEventListener("click", (event) => {
+			event.stopPropagation();
+			void this.manager
+				.moveKeyResult(kr.id, kr.period, "up")
+				.then(() => {
+					new Notice("已上移关键结果");
+					this.scheduleRender();
+				})
+				.catch((error: unknown) => {
+					const message =
+						error instanceof Error ? error.message : "未知错误";
+					new Notice(`上移关键结果失败：${message}`);
+				});
+		});
+
+		const moveDownButton = right.createEl("button", {
+			cls: "okr-row-action-btn",
+			text: "下移",
+		});
+		moveDownButton.setAttribute("aria-label", "下移关键结果");
+		moveDownButton.disabled = index === total - 1;
+		moveDownButton.addEventListener("click", (event) => {
+			event.stopPropagation();
+			void this.manager
+				.moveKeyResult(kr.id, kr.period, "down")
+				.then(() => {
+					new Notice("已下移关键结果");
+					this.scheduleRender();
+				})
+				.catch((error: unknown) => {
+					const message =
+						error instanceof Error ? error.message : "未知错误";
+					new Notice(`下移关键结果失败：${message}`);
+				});
 		});
 
 		const deleteButton = right.createEl("button", {

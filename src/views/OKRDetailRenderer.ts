@@ -1,4 +1,9 @@
-import { MarkdownPostProcessorContext, Notice, normalizePath } from "obsidian";
+import {
+	MarkdownPostProcessorContext,
+	MarkdownView,
+	Notice,
+	normalizePath,
+} from "obsidian";
 import { OKRManager } from "../manager/OKRManager";
 import { CheckInModal } from "../modals/CheckInModal";
 import { ConfirmModal } from "../modals/ConfirmModal";
@@ -55,6 +60,58 @@ export class OKRDetailRenderer {
 					section,
 				);
 			}
+
+			el.querySelectorAll<HTMLButtonElement>(
+				".okr-inline-move-up-btn",
+			).forEach((button) => {
+				button.addEventListener("click", () => {
+					const krId = button.dataset.krId ?? "";
+					const period = button.dataset.period ?? "";
+					if (!krId || !period) {
+						return;
+					}
+
+					void manager
+						.moveKeyResult(krId, period, "up")
+						.then(async () => {
+							new Notice("已上移关键结果");
+							await this.refreshPreview(manager, ctx.sourcePath);
+						})
+						.catch((error: unknown) => {
+							const message =
+								error instanceof Error
+									? error.message
+									: "未知错误";
+							new Notice(`上移关键结果失败：${message}`);
+						});
+				});
+			});
+
+			el.querySelectorAll<HTMLButtonElement>(
+				".okr-inline-move-down-btn",
+			).forEach((button) => {
+				button.addEventListener("click", () => {
+					const krId = button.dataset.krId ?? "";
+					const period = button.dataset.period ?? "";
+					if (!krId || !period) {
+						return;
+					}
+
+					void manager
+						.moveKeyResult(krId, period, "down")
+						.then(async () => {
+							new Notice("已下移关键结果");
+							await this.refreshPreview(manager, ctx.sourcePath);
+						})
+						.catch((error: unknown) => {
+							const message =
+								error instanceof Error
+									? error.message
+									: "未知错误";
+							new Notice(`下移关键结果失败：${message}`);
+						});
+				});
+			});
 
 			el.querySelectorAll<HTMLButtonElement>(
 				".okr-inline-checkin-btn",
@@ -238,7 +295,9 @@ export class OKRDetailRenderer {
 			cell.setAttribute("colspan", "8");
 		} else {
 			krs.forEach((kr, index) => {
-				tbody.appendChild(this.renderKRTableRow(kr, index + 1));
+				tbody.appendChild(
+					this.renderKRTableRow(kr, index + 1, krs.length),
+				);
 			});
 		}
 
@@ -249,6 +308,7 @@ export class OKRDetailRenderer {
 	private static renderKRTableRow(
 		kr: KeyResult,
 		index: number,
+		total: number,
 	): HTMLTableRowElement {
 		const progressClass =
 			kr.progress >= 80
@@ -297,6 +357,20 @@ export class OKRDetailRenderer {
 				{ krId: kr.id },
 			),
 		);
+		const moveUpButton = this.createActionButton(
+			"上移",
+			"okr-inline-action-btn okr-inline-move-up-btn",
+			{ krId: kr.id, period: kr.period },
+		);
+		moveUpButton.disabled = index === 1;
+		actions.appendChild(moveUpButton);
+		const moveDownButton = this.createActionButton(
+			"下移",
+			"okr-inline-action-btn okr-inline-move-down-btn",
+			{ krId: kr.id, period: kr.period },
+		);
+		moveDownButton.disabled = index === total;
+		actions.appendChild(moveDownButton);
 		actions.appendChild(
 			this.createActionButton(
 				"删除",
@@ -441,5 +515,17 @@ export class OKRDetailRenderer {
 		}
 
 		await app.workspace.revealLeaf(leaf);
+	}
+
+	private static async refreshPreview(
+		manager: OKRManager,
+		sourcePath: string,
+	): Promise<void> {
+		const view = manager
+			.getApp()
+			.workspace.getActiveViewOfType(MarkdownView);
+		if (view?.file?.path === normalizePath(sourcePath)) {
+			view.previewMode.rerender(true);
+		}
 	}
 }

@@ -408,6 +408,13 @@
   color: var(--interactive-accent);
 }
 
+.okr-row-action-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  border-color: var(--background-modifier-border);
+  color: var(--text-faint);
+}
+
 .okr-row-action-danger:hover {
   border-color: var(--color-red);
   color: var(--color-red);
@@ -703,6 +710,14 @@
   border-color: var(--interactive-accent);
   color: var(--interactive-accent);
   background: rgba(var(--interactive-accent-rgb), 0.06);
+}
+
+.okr-inline-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-color: var(--background-modifier-border);
+  color: var(--text-faint);
+  background: transparent;
 }
 
 .okr-inline-action-danger:hover {

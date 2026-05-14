@@ -47,7 +47,7 @@ export class CheckInModal extends Modal {
 		this.syncSelectedKRValues();
 
 		const krField = contentEl.createDiv("okr-field");
-		this.createRequiredLabel(krField, "Key Result");
+		this.createRequiredLabel(krField, "关键结果");
 		const krSelect = krField.createEl("select", { cls: "okr-select" });
 		if (this.krs.length === 0) {
 			krSelect.createEl("option", {
@@ -254,30 +254,22 @@ export class CheckInModal extends Modal {
 		this.isSubmitting = true;
 		this.validate();
 		try {
-			const history = await this.manager.getCheckIns(this.krId);
-			const latestProgress = history[0]?.progress ?? 0;
-			const delta =
-				history.length > 0
-					? this.progress - latestProgress
-					: this.progress;
-
 			await this.manager.recordCheckIn({
 				krId: this.krId,
 				date: this.date,
 				progress: this.progress,
-				delta,
 				note: this.note,
 				blocker: this.blocker,
 			});
 
-			new Notice(`已记录 Check-in：${this.krId} ${this.progress}%`);
+			new Notice(`已记录进度：${this.krId} ${this.progress}%`);
 			this.options.onComplete?.();
 			this.close();
 		} catch (error) {
 			new Notice(
 				error instanceof Error
-					? `记录 Check-in 失败：${error.message}`
-					: "记录 Check-in 失败",
+					? `记录进度失败：${error.message}`
+					: "记录进度失败",
 			);
 		} finally {
 			this.isSubmitting = false;

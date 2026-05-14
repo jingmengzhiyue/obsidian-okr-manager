@@ -24,6 +24,7 @@ export interface KeyResult {
 	objectiveId: string; // e.g. "O1"
 	period: OKRPeriod;
 	periodType: OKRPeriodType;
+	order: number;
 	title: string;
 	description: string;
 	owner: string;
@@ -36,16 +37,18 @@ export interface KeyResult {
 	created: string;
 	due: string;
 	filePath: string;
+	checkIns: CheckIn[];
 }
 
 export interface CheckIn {
+	id: string;
 	krId: string;
 	date: string;
 	progress: number;
 	delta: number;
 	note: string;
 	blocker: string;
-	filePath: string;
+	recordedAt: string;
 }
 
 export interface OKRPluginSettings {

@@ -1,6 +1,5 @@
 import { App, parseYaml, stringifyYaml, TFile } from "obsidian";
 import {
-	CheckIn,
 	Confidence,
 	KeyResult,
 	KRUnit,
@@ -9,20 +8,15 @@ import {
 	OKRStatus,
 } from "../types";
 import {
-	FRONTMATTER_BLOCKER,
 	FRONTMATTER_CONFIDENCE,
 	FRONTMATTER_CREATED,
 	FRONTMATTER_CURRENT,
-	FRONTMATTER_DATE,
-	FRONTMATTER_DELTA,
 	FRONTMATTER_DESCRIPTION,
 	FRONTMATTER_DUE,
 	FRONTMATTER_KEY_RESULTS,
-	FRONTMATTER_NOTE,
 	FRONTMATTER_OKR_ID,
 	FRONTMATTER_OKR_PERIOD,
 	FRONTMATTER_OKR_PERIOD_TYPE,
-	FRONTMATTER_OKR_REF,
 	FRONTMATTER_OWNER,
 	FRONTMATTER_PROGRESS,
 	FRONTMATTER_STATUS,
@@ -37,7 +31,6 @@ import {
 	YEAR_PERIOD_PATTERN,
 } from "../constants";
 import { formatLocalDate } from "../utils/date";
-import { compareKeyResultIds } from "../utils/sort";
 
 export class FileParser {
 	constructor(private app: App) {}
@@ -106,27 +99,8 @@ export class FileParser {
 		};
 	}
 
-	parseCheckIn(file: TFile, fm: Record<string, unknown>): CheckIn {
-		const ref = this.parseString(fm[FRONTMATTER_OKR_REF]);
-		return {
-			krId: this.parseKeyResultId(ref),
-			date: this.parseString(fm[FRONTMATTER_DATE]),
-			progress: this.clampProgress(
-				this.parseNumber(fm[FRONTMATTER_PROGRESS]),
-			),
-			delta: this.parseNumber(fm[FRONTMATTER_DELTA]),
-			note: this.parseString(fm[FRONTMATTER_NOTE]),
-			blocker: this.parseString(fm[FRONTMATTER_BLOCKER]),
-			filePath: file.path,
-		};
-	}
-
 	generateObjectiveFileName(id: string): string {
 		return `${id}.md`;
-	}
-
-	generateCheckInFileName(krId: string, date: string): string {
-		return `${date}-${krId}.md`;
 	}
 
 	getCurrentPeriod(periodType: OKRPeriodType): string {
@@ -340,10 +314,10 @@ export class FileParser {
 
 		return value
 			.map((item, index) =>
-				this.parseKeyResultEntry(item, context, index + 1),
+				this.parseKeyResultEntry(item, context, index),
 			)
 			.filter((item): item is KeyResult => item !== null)
-			.sort((left, right) => compareKeyResultIds(left.id, right.id));
+			.sort((left, right) => left.order - right.order);
 	}
 
 	private parseString(value: unknown, fallback = ""): string {
@@ -421,7 +395,12 @@ export class FileParser {
 		}
 
 		const record = value as Record<string, unknown>;
-		const fallbackId = `${context.objectiveId}-KR${index}`;
+		const fallbackOrder = index;
+		const parsedOrder = this.parseNumber(record.order, fallbackOrder);
+		const order = Number.isFinite(parsedOrder)
+			? Math.max(0, Math.floor(parsedOrder))
+			: fallbackOrder;
+		const fallbackId = `${context.objectiveId}-KR${index + 1}`;
 		const id =
 			this.parseKeyResultId(record[FRONTMATTER_OKR_ID]) || fallbackId;
 		const current = this.parseNumber(record[FRONTMATTER_CURRENT]);
@@ -434,6 +413,7 @@ export class FileParser {
 			objectiveId: context.objectiveId,
 			period: context.period,
 			periodType: context.periodType,
+			order,
 			title: this.parseString(record[FRONTMATTER_TITLE]),
 			description: this.parseString(record[FRONTMATTER_DESCRIPTION]),
 			owner: this.parseString(record[FRONTMATTER_OWNER]),
@@ -450,6 +430,7 @@ export class FileParser {
 			created: this.parseString(record[FRONTMATTER_CREATED]),
 			due: this.parseString(record[FRONTMATTER_DUE]),
 			filePath: context.filePath,
+			checkIns: this.parseCheckIns(record.checkIns, id, context.filePath),
 		};
 	}
 
@@ -467,6 +448,52 @@ export class FileParser {
 			[FRONTMATTER_CONFIDENCE]: keyResult.confidence,
 			[FRONTMATTER_CREATED]: keyResult.created,
 			[FRONTMATTER_DUE]: keyResult.due,
+			order: keyResult.order,
+			checkIns: keyResult.checkIns.map((checkIn) => ({
+				id: checkIn.id,
+				date: checkIn.date,
+				progress: this.clampProgress(checkIn.progress),
+				delta: checkIn.delta,
+				note: checkIn.note,
+				blocker: checkIn.blocker,
+				recordedAt: checkIn.recordedAt,
+			})),
 		};
+	}
+
+	private parseCheckIns(
+		value: unknown,
+		krId: string,
+		filePath: string,
+	): KeyResult["checkIns"] {
+		if (!Array.isArray(value)) {
+			return [];
+		}
+
+		return value
+			.filter((item): item is Record<string, unknown> => {
+				return Boolean(item) && typeof item === "object";
+			})
+			.map((item, index) => {
+				const fallbackId = `${krId}-${index + 1}`;
+				const recordedAt = this.parseString(item.recordedAt);
+				return {
+					id: this.parseString(item.id) || fallbackId,
+					krId,
+					date: this.parseString(item.date),
+					progress: this.clampProgress(
+						this.parseNumber(item.progress),
+					),
+					delta: this.parseNumber(item.delta),
+					note: this.parseString(item.note),
+					blocker: this.parseString(item.blocker),
+					recordedAt:
+						recordedAt ||
+						`${this.parseString(item.date)}T00:00:00.000Z`,
+				};
+			})
+			.sort((left, right) =>
+				right.recordedAt.localeCompare(left.recordedAt),
+			);
 	}
 }

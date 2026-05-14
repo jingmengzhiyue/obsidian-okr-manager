@@ -55,7 +55,7 @@ export default class OKRPlugin extends Plugin {
 			(leaf) => new DashboardView(leaf, this.manager),
 		);
 
-		// 注册 Markdown 后处理器（渲染 KR 列表和 check-in 历史）
+		// 注册 Markdown 后处理器（渲染 KR 列表与行内操作）
 		this.registerMarkdownPostProcessor(
 			OKRDetailRenderer.postProcessor(this.manager),
 		);

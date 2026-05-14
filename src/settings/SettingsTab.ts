@@ -27,17 +27,19 @@ export class SettingsTab extends PluginSettingTab {
 					}),
 			);
 
-		new Setting(containerEl).setName("进度记录目录").addText((text) =>
-			text
-				.setPlaceholder("目标/进度记录")
-				.setValue(this.plugin.settings.checkInsDir)
-				.onChange(async (value) => {
-					this.plugin.settings.checkInsDir = normalizePath(
-						value.trim() || "OKR/Check-ins",
-					);
-					await this.plugin.saveSettings();
-				}),
-		);
+		new Setting(containerEl)
+			.setName("进度记录目录（已弃用）")
+			.setDesc("旧独立进度记录目录，当前版本不再读取或写入新文件。")
+			.addText((text) =>
+				text
+					.setValue(this.plugin.settings.checkInsDir)
+					.onChange(async (value) => {
+						this.plugin.settings.checkInsDir = normalizePath(
+							value.trim() || "OKR/Check-ins",
+						);
+						await this.plugin.saveSettings();
+					}),
+			);
 
 		new Setting(containerEl)
 			.setName("默认周期类型")
