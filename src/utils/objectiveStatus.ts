@@ -1,4 +1,5 @@
-import type { Objective } from "../types";
+import { createI18n, type I18n } from "../i18n";
+import type { Objective, OKRStatus } from "../types";
 import { diffLocalDates, getTodayLocalDate } from "./date";
 
 type ObjectiveDeadlineLike = Pick<Objective, "due" | "status" | "id" | "title">;
@@ -15,15 +16,23 @@ export interface ObjectiveDeadlineState {
 
 const DUE_SOON_THRESHOLD_DAYS = 3;
 
+export function getObjectiveStatusLabel(
+	status: OKRStatus,
+	i18n: I18n = createI18n(),
+): string {
+	return i18n.t(`status.${status}`);
+}
+
 export function getObjectiveDeadlineState(
 	objective: ObjectiveDeadlineLike,
 	today = getTodayLocalDate(),
+	i18n: I18n = createI18n(),
 ): ObjectiveDeadlineState {
 	const due = objective.due.trim();
 	if (!due) {
 		return {
 			tone: "normal",
-			label: "未设置截止日期",
+			label: i18n.t("objectiveStatus.noDueDate"),
 			helpText: null,
 			showPostponeAction: false,
 			daysUntilDue: null,
@@ -33,7 +42,7 @@ export function getObjectiveDeadlineState(
 	if (objective.status === "completed") {
 		return {
 			tone: "normal",
-			label: `截止 ${due}`,
+			label: i18n.t("objectiveStatus.dueDate", { due }),
 			helpText: null,
 			showPostponeAction: false,
 			daysUntilDue: null,
@@ -44,7 +53,7 @@ export function getObjectiveDeadlineState(
 	if (daysUntilDue == null) {
 		return {
 			tone: "normal",
-			label: `截止 ${due}`,
+			label: i18n.t("objectiveStatus.dueDate", { due }),
 			helpText: null,
 			showPostponeAction: false,
 			daysUntilDue: null,
@@ -55,8 +64,13 @@ export function getObjectiveDeadlineState(
 		const overdueDays = Math.abs(daysUntilDue);
 		return {
 			tone: "overdue",
-			label: `已超期 ${overdueDays} 天`,
-			helpText: `原截止日期 ${due}`,
+			label: i18n.t(
+				overdueDays === 1
+					? "objectiveStatus.overdueOneDay"
+					: "objectiveStatus.overdueDays",
+				{ days: overdueDays },
+			),
+			helpText: i18n.t("objectiveStatus.originalDueDate", { due }),
 			showPostponeAction: true,
 			daysUntilDue,
 		};
@@ -65,8 +79,16 @@ export function getObjectiveDeadlineState(
 	if (daysUntilDue <= DUE_SOON_THRESHOLD_DAYS) {
 		return {
 			tone: "due-soon",
-			label: daysUntilDue === 0 ? "今天截止" : `${daysUntilDue} 天后截止`,
-			helpText: `截止日期 ${due}`,
+			label:
+				daysUntilDue === 0
+					? i18n.t("objectiveStatus.dueToday")
+					: i18n.t(
+							daysUntilDue === 1
+								? "objectiveStatus.dueInOneDay"
+								: "objectiveStatus.dueInDays",
+							{ days: daysUntilDue },
+						),
+			helpText: i18n.t("objectiveStatus.dueDateHelp", { due }),
 			showPostponeAction: true,
 			daysUntilDue,
 		};
@@ -74,7 +96,7 @@ export function getObjectiveDeadlineState(
 
 	return {
 		tone: "normal",
-		label: `截止 ${due}`,
+		label: i18n.t("objectiveStatus.dueDate", { due }),
 		helpText: null,
 		showPostponeAction: false,
 		daysUntilDue,

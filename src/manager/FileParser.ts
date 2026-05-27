@@ -1,4 +1,5 @@
 import { App, parseYaml, stringifyYaml, TFile } from "obsidian";
+import { createI18n, type I18n } from "../i18n";
 import {
 	Confidence,
 	KeyResult,
@@ -133,18 +134,26 @@ export class FileParser {
 		return formatLocalDate(endDate);
 	}
 
-	formatPeriodLabel(period: string, periodType?: OKRPeriodType): string {
+	formatPeriodLabel(
+		period: string,
+		periodType?: OKRPeriodType,
+		i18n: I18n = createI18n(),
+	): string {
 		const type = periodType ?? this.inferPeriodType(period);
 		switch (type) {
-			case "week":
-				return period.replace("-W", " 第 ") + " 周";
+			case "week": {
+				const [year, week] = period.split("-W");
+				return i18n.t("period.label.week", { year, week });
+			}
 			case "month":
 				return period;
-			case "quarter":
-				return period.replace("-Q", " Q");
+			case "quarter": {
+				const [year, quarter] = period.split("-Q");
+				return i18n.t("period.label.quarter", { year, quarter });
+			}
 			case "year":
 			default:
-				return `${period} 年`;
+				return i18n.t("period.label.year", { year: period });
 		}
 	}
 

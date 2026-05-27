@@ -1,4 +1,5 @@
 import { App, Modal, Notice, TFile } from "obsidian";
+import { type TranslationValue } from "../i18n";
 import { OKRManager } from "../manager/OKRManager";
 import { OKRPeriodType } from "../types";
 import { getTodayLocalDate } from "../utils/date";
@@ -36,26 +37,41 @@ export class NewObjectiveModal extends Modal {
 
 		contentEl.createEl("h2", {
 			cls: "okr-modal-title",
-			text: "新建目标",
+			text: this.t("modals.newObjective.title"),
 		});
 
 		const periodTypeField = contentEl.createDiv("okr-field");
-		this.createRequiredLabel(periodTypeField, "周期类型");
+		this.createRequiredLabel(
+			periodTypeField,
+			this.t("modals.fields.periodType"),
+		);
 		const periodTypeSelect = periodTypeField.createEl("select", {
 			cls: "okr-select",
 		});
-		periodTypeSelect.createEl("option", { text: "周", value: "week" });
-		periodTypeSelect.createEl("option", { text: "月", value: "month" });
-		periodTypeSelect.createEl("option", { text: "季度", value: "quarter" });
-		periodTypeSelect.createEl("option", { text: "年", value: "year" });
+		periodTypeSelect.createEl("option", {
+			text: this.t("modals.select.week"),
+			value: "week",
+		});
+		periodTypeSelect.createEl("option", {
+			text: this.t("modals.select.month"),
+			value: "month",
+		});
+		periodTypeSelect.createEl("option", {
+			text: this.t("modals.select.quarter"),
+			value: "quarter",
+		});
+		periodTypeSelect.createEl("option", {
+			text: this.t("modals.select.year"),
+			value: "year",
+		});
 		periodTypeSelect.value = this.periodType;
 
 		const periodField = contentEl.createDiv("okr-field");
-		this.createRequiredLabel(periodField, "周期");
+		this.createRequiredLabel(periodField, this.t("modals.fields.period"));
 		const periodInput = periodField.createEl("input", {
 			cls: "okr-input",
 			type: "text",
-			attr: { placeholder: "请输入周期" },
+			attr: { placeholder: this.t("modals.fields.period") },
 		});
 		periodInput.value = this.period;
 		const periodHint = periodField.createEl("div", {
@@ -64,7 +80,7 @@ export class NewObjectiveModal extends Modal {
 		});
 		const periodError = periodField.createEl("div", {
 			cls: "okr-input-error",
-			text: "周期格式不正确",
+			text: this.t("modals.newObjective.periodFormatError"),
 		});
 		periodTypeSelect.addEventListener("change", () => {
 			this.periodType = periodTypeSelect.value as OKRPeriodType;
@@ -92,11 +108,11 @@ export class NewObjectiveModal extends Modal {
 		});
 
 		const titleField = contentEl.createDiv("okr-field");
-		this.createRequiredLabel(titleField, "标题");
+		this.createRequiredLabel(titleField, this.t("modals.fields.title"));
 		const titleInput = titleField.createEl("input", {
 			cls: "okr-input",
 			type: "text",
-			placeholder: "例如：提升产品用户体验",
+			placeholder: this.t("modals.newObjective.placeholder"),
 		});
 		titleInput.addEventListener("input", () => {
 			this.title = titleInput.value.trim();
@@ -104,7 +120,7 @@ export class NewObjectiveModal extends Modal {
 		});
 
 		const ownerField = contentEl.createDiv("okr-field");
-		this.createRequiredLabel(ownerField, "负责人");
+		this.createRequiredLabel(ownerField, this.t("modals.fields.owner"));
 		const ownerInput = ownerField.createEl("input", {
 			cls: "okr-input",
 			type: "text",
@@ -115,7 +131,7 @@ export class NewObjectiveModal extends Modal {
 		});
 
 		const dueField = contentEl.createDiv("okr-field");
-		this.createRequiredLabel(dueField, "截止日期");
+		this.createRequiredLabel(dueField, this.t("modals.fields.dueDate"));
 		const dueInput = dueField.createEl("input", {
 			cls: "okr-input",
 			type: "date",
@@ -127,10 +143,13 @@ export class NewObjectiveModal extends Modal {
 		});
 
 		const descField = contentEl.createDiv("okr-field");
-		descField.createEl("label", { cls: "okr-label", text: "描述" });
+		descField.createEl("label", {
+			cls: "okr-label",
+			text: this.t("modals.fields.description"),
+		});
 		const descInput = descField.createEl("textarea", {
 			cls: "okr-textarea",
-			placeholder: "背景描述...",
+			placeholder: this.t("modals.objective.descriptionPlaceholder"),
 		});
 		descInput.addEventListener("input", () => {
 			this.description = descInput.value.trim();
@@ -139,13 +158,13 @@ export class NewObjectiveModal extends Modal {
 		const footer = contentEl.createDiv("okr-modal-footer");
 		const cancelBtn = footer.createEl("button", {
 			cls: "okr-btn-cancel",
-			text: "取消",
+			text: this.t("actions.cancel"),
 		});
 		cancelBtn.addEventListener("click", () => this.close());
 
 		const confirmBtn = footer.createEl("button", {
 			cls: "okr-btn-confirm",
-			text: "创建",
+			text: this.t("actions.create"),
 			attr: { disabled: "true", type: "button" },
 		});
 		confirmBtn.addEventListener("click", () => {
@@ -209,14 +228,18 @@ export class NewObjectiveModal extends Modal {
 				await this.app.workspace.openLinkText(file.path, "", false);
 			}
 
-			new Notice(`已创建 Objective：${obj.title}`);
+			new Notice(
+				this.t("modals.newObjective.created", { title: obj.title }),
+			);
 			this.onComplete?.();
 			this.close();
 		} catch (error) {
 			new Notice(
 				error instanceof Error
-					? `创建 Objective 失败：${error.message}`
-					: "创建 Objective 失败",
+					? this.t("modals.newObjective.createFailedWithReason", {
+							message: error.message,
+						})
+					: this.t("modals.newObjective.createFailed"),
 			);
 		} finally {
 			this.isSubmitting = false;
@@ -243,14 +266,21 @@ export class NewObjectiveModal extends Modal {
 	private getPeriodHint(periodType: OKRPeriodType): string {
 		switch (periodType) {
 			case "week":
-				return "格式：YYYY-Www，例如 2026-W20";
+				return this.t("modals.periodHint.week");
 			case "month":
-				return "格式：YYYY-MM，例如 2026-05";
+				return this.t("modals.periodHint.month");
 			case "quarter":
-				return "格式：YYYY-Qn，例如 2026-Q2";
+				return this.t("modals.periodHint.quarter");
 			case "year":
 			default:
-				return "格式：YYYY，例如 2026";
+				return this.t("modals.periodHint.year");
 		}
+	}
+
+	private t(
+		key: string,
+		values?: Record<string, TranslationValue>,
+	): string {
+		return this.manager.getI18n().t(key, values);
 	}
 }

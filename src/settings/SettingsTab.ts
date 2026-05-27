@@ -11,10 +11,11 @@ export class SettingsTab extends PluginSettingTab {
 
 	display(): void {
 		const { containerEl } = this;
+		const t = this.plugin.i18n.t;
 		containerEl.empty();
 		new Setting(containerEl)
-			.setName("目标目录")
-			.setDesc("所有目标文件的存储路径")
+			.setName(t("settings.rootDir.name"))
+			.setDesc(t("settings.rootDir.desc"))
 			.addText((text) =>
 				text
 					.setPlaceholder("OKR")
@@ -28,28 +29,14 @@ export class SettingsTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("进度记录目录（已弃用）")
-			.setDesc("旧独立进度记录目录，当前版本不再读取或写入新文件。")
-			.addText((text) =>
-				text
-					.setValue(this.plugin.settings.checkInsDir)
-					.onChange(async (value) => {
-						this.plugin.settings.checkInsDir = normalizePath(
-							value.trim() || "OKR/Check-ins",
-						);
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName("默认周期类型")
-			.setDesc("新建目标时默认使用的周期类型")
+			.setName(t("settings.defaultPeriodType.name"))
+			.setDesc(t("settings.defaultPeriodType.desc"))
 			.addDropdown((dropdown) =>
 				dropdown
-					.addOption("week", "周")
-					.addOption("month", "月")
-					.addOption("quarter", "季度")
-					.addOption("year", "年")
+					.addOption("week", t("modals.select.week"))
+					.addOption("month", t("modals.select.month"))
+					.addOption("quarter", t("modals.select.quarter"))
+					.addOption("year", t("modals.select.year"))
 					.setValue(this.plugin.settings.defaultPeriodType)
 					.onChange(async (value) => {
 						this.plugin.settings.defaultPeriodType =
@@ -59,8 +46,8 @@ export class SettingsTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("自动计算进度")
-			.setDesc("当当前值或目标值更新时自动重算进度，关闭后可手动设置进度")
+			.setName(t("settings.autoComputeProgress.name"))
+			.setDesc(t("settings.autoComputeProgress.desc"))
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.plugin.settings.autoComputeProgress)
@@ -71,7 +58,7 @@ export class SettingsTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("启动时打开仪表盘")
+			.setName(t("settings.showDashboardOnStartup.name"))
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.plugin.settings.showDashboardOnStartup)

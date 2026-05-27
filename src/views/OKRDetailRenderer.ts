@@ -4,6 +4,7 @@ import {
 	Notice,
 	normalizePath,
 } from "obsidian";
+import { type I18n } from "../i18n";
 import { OKRManager } from "../manager/OKRManager";
 import { CheckInModal } from "../modals/CheckInModal";
 import { ConfirmModal } from "../modals/ConfirmModal";
@@ -49,6 +50,7 @@ export class OKRDetailRenderer {
 					(item) => item.id === objId,
 				);
 				const section = this.renderObjectiveSection(
+					manager.getI18n(),
 					objective ?? {
 						id: objId,
 						title: objId,
@@ -85,15 +87,23 @@ export class OKRDetailRenderer {
 					void manager
 						.moveKeyResult(krId, period, "up")
 						.then(async () => {
-							new Notice("已上移关键结果");
+							new Notice(
+								manager.getI18n().t("detail.keyResultMovedUp"),
+							);
 							await this.refreshPreview(manager, ctx.sourcePath);
 						})
 						.catch((error: unknown) => {
 							const message =
 								error instanceof Error
 									? error.message
-									: "未知错误";
-							new Notice(`上移关键结果失败：${message}`);
+									: manager.getI18n().t("errors.unknown");
+							new Notice(
+								manager
+									.getI18n()
+									.t("detail.keyResultMovedUpFailed", {
+										message,
+									}),
+							);
 						});
 				});
 			});
@@ -111,15 +121,25 @@ export class OKRDetailRenderer {
 					void manager
 						.moveKeyResult(krId, period, "down")
 						.then(async () => {
-							new Notice("已下移关键结果");
+							new Notice(
+								manager
+									.getI18n()
+									.t("detail.keyResultMovedDown"),
+							);
 							await this.refreshPreview(manager, ctx.sourcePath);
 						})
 						.catch((error: unknown) => {
 							const message =
 								error instanceof Error
 									? error.message
-									: "未知错误";
-							new Notice(`下移关键结果失败：${message}`);
+									: manager.getI18n().t("errors.unknown");
+							new Notice(
+								manager
+									.getI18n()
+									.t("detail.keyResultMovedDownFailed", {
+										message,
+									}),
+							);
 						});
 				});
 			});
@@ -152,7 +172,11 @@ export class OKRDetailRenderer {
 					void manager.getAllKeyResults(period).then((krs) => {
 						const keyResult = krs.find((item) => item.id === krId);
 						if (!keyResult) {
-							new Notice("找不到要编辑的关键结果");
+							new Notice(
+								manager
+									.getI18n()
+									.t("detail.editKeyResultMissing"),
+							);
 							return;
 						}
 
@@ -177,13 +201,27 @@ export class OKRDetailRenderer {
 					}
 
 					new ConfirmModal(manager.getApp(), {
-						title: `删除 ${krId}`,
-						message: `确认删除关键结果「${krTitle}」及其全部进度记录吗？`,
-						confirmText: "删除",
-						errorNotice: `删除关键结果失败：${krTitle}`,
+						title: `${manager.getI18n().t("actions.delete")} ${krId}`,
+						message: manager
+							.getI18n()
+							.t("detail.deleteKeyResultConfirm", {
+								title: krTitle,
+							}),
+						confirmText: manager.getI18n().t("actions.delete"),
+						errorNotice: manager
+							.getI18n()
+							.t("detail.deleteKeyResultFailed", {
+								title: krTitle,
+							}),
 						onConfirm: async () => {
 							await manager.deleteKeyResult(krId, period);
-							new Notice(`已删除关键结果：${krTitle}`);
+							new Notice(
+								manager
+									.getI18n()
+									.t("detail.deleteKeyResultSuccess", {
+										title: krTitle,
+									}),
+							);
 						},
 					}).open();
 				});
@@ -204,7 +242,11 @@ export class OKRDetailRenderer {
 							(item) => item.id === objectiveId,
 						);
 						if (!objective) {
-							new Notice("找不到要编辑的目标");
+							new Notice(
+								manager
+									.getI18n()
+									.t("detail.editObjectiveMissing"),
+							);
 							return;
 						}
 
@@ -230,17 +272,31 @@ export class OKRDetailRenderer {
 					}
 
 					new ConfirmModal(manager.getApp(), {
-						title: `删除 ${objectiveId}`,
-						message: `确认删除目标「${objectiveTitle}」、其全部关键结果以及关联进度记录吗？`,
-						confirmText: "删除",
-						errorNotice: `删除目标失败：${objectiveTitle}`,
+						title: `${manager.getI18n().t("actions.delete")} ${objectiveId}`,
+						message: manager
+							.getI18n()
+							.t("detail.deleteObjectiveConfirm", {
+								title: objectiveTitle,
+							}),
+						confirmText: manager.getI18n().t("actions.delete"),
+						errorNotice: manager
+							.getI18n()
+							.t("detail.deleteObjectiveFailed", {
+								title: objectiveTitle,
+							}),
 						onConfirm: async () => {
 							await manager.deleteObjective(
 								objectiveId,
 								period,
 								true,
 							);
-							new Notice(`已删除目标：${objectiveTitle}`);
+							new Notice(
+								manager
+									.getI18n()
+									.t("detail.deleteObjectiveSuccess", {
+										title: objectiveTitle,
+									}),
+							);
 						},
 					}).open();
 				});
@@ -274,7 +330,11 @@ export class OKRDetailRenderer {
 							(item) => item.id === objectiveId,
 						);
 						if (!objective) {
-							new Notice("找不到要延期的目标");
+							new Notice(
+								manager
+									.getI18n()
+									.t("detail.postponeObjectiveMissing"),
+							);
 							return;
 						}
 
@@ -298,16 +358,25 @@ export class OKRDetailRenderer {
 	}
 
 	private static renderObjectiveSection(
+		i18n: I18n,
 		objective: Objective,
 	): DocumentFragment {
 		const fragment = document.createDocumentFragment();
-		const deadlineState = getObjectiveDeadlineState(objective);
+		const deadlineState = getObjectiveDeadlineState(
+			objective,
+			undefined,
+			i18n,
+		);
 		fragment.appendChild(
-			this.renderObjectiveActionBar(objective, deadlineState),
+			this.renderObjectiveActionBar(objective, deadlineState, i18n),
 		);
 		if (deadlineState.tone !== "normal") {
 			fragment.appendChild(
-				this.renderObjectiveDeadlineBanner(objective, deadlineState),
+				this.renderObjectiveDeadlineBanner(
+					objective,
+					deadlineState,
+					i18n,
+				),
 			);
 		}
 
@@ -316,14 +385,14 @@ export class OKRDetailRenderer {
 		const thead = table.createEl("thead");
 		const headRow = thead.createEl("tr");
 		for (const header of [
-			"序号",
-			"标题",
-			"负责人",
-			"进度",
-			"进度%",
-			"信心",
-			"截止日",
-			"操作",
+			i18n.t("detail.index"),
+			i18n.t("detail.title"),
+			i18n.t("detail.owner"),
+			i18n.t("detail.progress"),
+			i18n.t("detail.progressPercent"),
+			i18n.t("detail.confidence"),
+			i18n.t("detail.dueDate"),
+			i18n.t("detail.actions"),
 		]) {
 			headRow.createEl("th", { text: header });
 		}
@@ -332,7 +401,7 @@ export class OKRDetailRenderer {
 		if (objective.keyResults.length === 0) {
 			const row = tbody.createEl("tr");
 			const cell = row.createEl("td", {
-				text: "当前目标暂无关键结果",
+				text: i18n.t("detail.emptyKeyResults"),
 			});
 			cell.setAttribute("colspan", "8");
 		} else {
@@ -342,6 +411,7 @@ export class OKRDetailRenderer {
 						kr,
 						index + 1,
 						objective.keyResults.length,
+						i18n,
 					),
 				);
 			});
@@ -355,6 +425,7 @@ export class OKRDetailRenderer {
 		kr: KeyResult,
 		index: number,
 		total: number,
+		i18n: I18n,
 	): HTMLTableRowElement {
 		const progressClass =
 			kr.progress >= 80
@@ -383,7 +454,7 @@ export class OKRDetailRenderer {
 			cls: `okr-kr-dot okr-conf-${kr.confidence}`,
 			text: "●",
 		});
-		confidenceCell.append(` ${kr.confidence}`);
+		confidenceCell.append(` ${i18n.t(`confidence.${kr.confidence}`)}`);
 
 		row.createEl("td", { text: kr.due || "-" });
 
@@ -391,27 +462,27 @@ export class OKRDetailRenderer {
 		const actions = actionCell.createDiv("okr-inline-actions");
 		actions.appendChild(
 			this.createActionButton(
-				"记录进度",
+				i18n.t("actions.recordCheckIn"),
 				"okr-inline-action-btn okr-inline-checkin-btn",
 				{ krId: kr.id },
 			),
 		);
 		actions.appendChild(
 			this.createActionButton(
-				"编辑",
+				i18n.t("actions.edit"),
 				"okr-inline-action-btn okr-inline-edit-kr-btn",
 				{ krId: kr.id },
 			),
 		);
 		const moveUpButton = this.createActionButton(
-			"上移",
+			i18n.t("actions.moveUp"),
 			"okr-inline-action-btn okr-inline-move-up-btn",
 			{ krId: kr.id, period: kr.period },
 		);
 		moveUpButton.disabled = index === 1;
 		actions.appendChild(moveUpButton);
 		const moveDownButton = this.createActionButton(
-			"下移",
+			i18n.t("actions.moveDown"),
 			"okr-inline-action-btn okr-inline-move-down-btn",
 			{ krId: kr.id, period: kr.period },
 		);
@@ -419,7 +490,7 @@ export class OKRDetailRenderer {
 		actions.appendChild(moveDownButton);
 		actions.appendChild(
 			this.createActionButton(
-				"删除",
+				i18n.t("actions.delete"),
 				"okr-inline-action-btn okr-inline-action-danger okr-inline-delete-kr-btn",
 				{ krId: kr.id, krTitle: kr.title },
 			),
@@ -431,6 +502,7 @@ export class OKRDetailRenderer {
 	private static renderObjectiveActionBar(
 		objective: Objective,
 		deadlineState: ReturnType<typeof getObjectiveDeadlineState>,
+		i18n: I18n,
 	): HTMLDivElement {
 		const bar = document.createElement("div");
 		bar.className = "okr-inline-action-bar";
@@ -448,13 +520,13 @@ export class OKRDetailRenderer {
 		bar.appendChild(summary);
 		bar.appendChild(
 			this.createActionButton(
-				"打开仪表盘",
+				i18n.t("actions.openDashboard"),
 				"okr-inline-action-btn okr-inline-open-dashboard-btn",
 			),
 		);
 		bar.appendChild(
 			this.createActionButton(
-				"新增关键结果",
+				i18n.t("actions.addKeyResult"),
 				"okr-inline-action-btn okr-inline-add-kr-btn",
 				{
 					objectiveId: objective.id,
@@ -465,7 +537,7 @@ export class OKRDetailRenderer {
 		if (deadlineState.showPostponeAction) {
 			bar.appendChild(
 				this.createActionButton(
-					"延期",
+					i18n.t("actions.postpone"),
 					"okr-inline-action-btn okr-inline-postpone-objective-btn",
 					{
 						objectiveId: objective.id,
@@ -476,7 +548,7 @@ export class OKRDetailRenderer {
 		}
 		bar.appendChild(
 			this.createActionButton(
-				"编辑目标",
+				i18n.t("actions.editObjective"),
 				"okr-inline-action-btn okr-inline-edit-objective-btn",
 				{
 					objectiveId: objective.id,
@@ -486,7 +558,7 @@ export class OKRDetailRenderer {
 		);
 		bar.appendChild(
 			this.createActionButton(
-				"删除目标",
+				i18n.t("actions.delete"),
 				"okr-inline-action-btn okr-inline-action-danger okr-inline-delete-objective-btn",
 				{
 					objectiveId: objective.id,
@@ -501,6 +573,7 @@ export class OKRDetailRenderer {
 	private static renderObjectiveDeadlineBanner(
 		objective: Objective,
 		deadlineState: ReturnType<typeof getObjectiveDeadlineState>,
+		i18n: I18n,
 	): HTMLDivElement {
 		const banner = document.createElement("div");
 		banner.className = `okr-inline-objective-alert okr-inline-objective-alert-${deadlineState.tone}`;
@@ -510,7 +583,7 @@ export class OKRDetailRenderer {
 		banner.createEl("span", {
 			text:
 				deadlineState.helpText ??
-				`目标「${objective.title}」需要更新截止日期。`,
+				i18n.t("modals.postpone.hint", { title: objective.title }),
 		});
 		return banner;
 	}

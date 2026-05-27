@@ -6,6 +6,7 @@ import {
 	TFile,
 	TFolder,
 } from "obsidian";
+import { createI18n, type I18n, type TranslationValue } from "../i18n";
 import { FileParser } from "./FileParser";
 import {
 	CheckIn,
@@ -51,6 +52,7 @@ export class OKRManager {
 	constructor(
 		private app: App,
 		private settings: OKRPluginSettings,
+		private i18n: I18n = createI18n(),
 	) {
 		this.parser = new FileParser(app);
 	}
@@ -65,6 +67,14 @@ export class OKRManager {
 
 	getParser(): FileParser {
 		return this.parser;
+	}
+
+	getI18n(): I18n {
+		return this.i18n;
+	}
+
+	updateI18n(i18n: I18n): void {
+		this.i18n = i18n;
 	}
 
 	updateSettings(settings: OKRPluginSettings): void {
@@ -198,7 +208,7 @@ export class OKRManager {
 		const filePath = normalizePath(`${periodDir}/${fileName}`);
 		this.assertFileDoesNotExist(
 			filePath,
-			`Objective 文件已存在：${fileName}`,
+			this.t("errors.objectiveExists", { fileName }),
 		);
 
 		const objective: Objective = {
@@ -235,7 +245,11 @@ export class OKRManager {
 			params.period,
 		);
 		if (!entry) {
-			throw new Error(`找不到 Objective：${params.objectiveId}`);
+			throw new Error(
+				this.t("errors.objectiveNotFound", {
+					id: params.objectiveId,
+				}),
+			);
 		}
 
 		const existing = entry.objective.keyResults;
@@ -302,7 +316,9 @@ export class OKRManager {
 	): Promise<Objective> {
 		const entry = await this.findObjectiveEntry(objectiveId, period);
 		if (!entry) {
-			throw new Error(`找不到 Objective：${objectiveId}`);
+			throw new Error(
+				this.t("errors.objectiveNotFound", { id: objectiveId }),
+			);
 		}
 
 		const updatedObjective: Objective = {
@@ -343,7 +359,7 @@ export class OKRManager {
 			this.normalizePeriod(period),
 		);
 		if (!found) {
-			throw new Error(`找不到 Key Result：${krId}`);
+			throw new Error(this.t("errors.keyResultNotFound", { id: krId }));
 		}
 
 		let updatedKeyResult: KeyResult | null = null;
@@ -375,7 +391,7 @@ export class OKRManager {
 			return updatedKeyResult;
 		});
 		if (!updatedKeyResult) {
-			throw new Error(`找不到 Key Result：${krId}`);
+			throw new Error(this.t("errors.keyResultNotFound", { id: krId }));
 		}
 
 		const updatedObjective: Objective = {
@@ -399,14 +415,18 @@ export class OKRManager {
 	): Promise<void> {
 		const found = await this.findObjectiveEntryByKRId(params.krId);
 		if (!found) {
-			throw new Error(`找不到 Key Result：${params.krId}`);
+			throw new Error(
+				this.t("errors.keyResultNotFound", { id: params.krId }),
+			);
 		}
 
 		const keyResult = found.objective.keyResults.find(
 			(item) => item.id === params.krId,
 		);
 		if (!keyResult) {
-			throw new Error(`找不到 Key Result：${params.krId}`);
+			throw new Error(
+				this.t("errors.keyResultNotFound", { id: params.krId }),
+			);
 		}
 
 		const history = keyResult.checkIns;
@@ -463,7 +483,7 @@ export class OKRManager {
 			this.normalizePeriod(period),
 		);
 		if (!found) {
-			throw new Error(`找不到关键结果：${krId}`);
+			throw new Error(this.t("errors.keyResultNotFound", { id: krId }));
 		}
 
 		const sorted = [...found.objective.keyResults].sort(
@@ -471,7 +491,7 @@ export class OKRManager {
 		);
 		const currentIndex = sorted.findIndex((item) => item.id === krId);
 		if (currentIndex === -1) {
-			throw new Error(`找不到关键结果：${krId}`);
+			throw new Error(this.t("errors.keyResultNotFound", { id: krId }));
 		}
 
 		const targetIndex =
@@ -493,16 +513,19 @@ export class OKRManager {
 			this.normalizePeriod(period),
 		);
 		if (!found) {
-			throw new Error(`找不到关键结果：${krId}`);
+			throw new Error(this.t("errors.keyResultNotFound", { id: krId }));
 		}
 
 		const sorted = normalizeKeyResultOrders(found.objective.keyResults);
 		const currentIndex = sorted.findIndex((item) => item.id === krId);
 		if (currentIndex === -1) {
-			throw new Error(`找不到关键结果：${krId}`);
+			throw new Error(this.t("errors.keyResultNotFound", { id: krId }));
 		}
 
-		const clampedIndex = Math.max(0, Math.min(targetIndex, sorted.length - 1));
+		const clampedIndex = Math.max(
+			0,
+			Math.min(targetIndex, sorted.length - 1),
+		);
 		if (clampedIndex === currentIndex) {
 			return;
 		}
@@ -590,7 +613,9 @@ export class OKRManager {
 	): Promise<void> {
 		const entry = await this.findObjectiveEntry(objectiveId, period);
 		if (!entry) {
-			throw new Error(`找不到要删除的目标：${objectiveId}`);
+			throw new Error(
+				this.t("errors.objectiveToDeleteNotFound", { id: objectiveId }),
+			);
 		}
 
 		await this.app.fileManager.trashFile(entry.file);
@@ -603,7 +628,9 @@ export class OKRManager {
 			this.normalizePeriod(period),
 		);
 		if (!found) {
-			throw new Error(`找不到要删除的关键结果：${krId}`);
+			throw new Error(
+				this.t("errors.keyResultToDeleteNotFound", { id: krId }),
+			);
 		}
 
 		const updatedKeyResults = found.objective.keyResults
@@ -613,7 +640,9 @@ export class OKRManager {
 				order: index,
 			}));
 		if (updatedKeyResults.length === found.objective.keyResults.length) {
-			throw new Error(`找不到要删除的关键结果：${krId}`);
+			throw new Error(
+				this.t("errors.keyResultToDeleteNotFound", { id: krId }),
+			);
 		}
 
 		const updatedObjective: Objective = {
@@ -835,7 +864,9 @@ export class OKRManager {
 			if (!current) {
 				await this.app.vault.createFolder(currentPath);
 			} else if (!(current instanceof TFolder)) {
-				throw new Error(`路径已被文件占用：${currentPath}`);
+				throw new Error(
+					this.t("errors.pathOccupiedByFile", { path: currentPath }),
+				);
 			}
 		}
 	}
@@ -899,6 +930,10 @@ export class OKRManager {
 			[FRONTMATTER_TAGS]: ["okr", "objective"],
 		};
 
-		return `---\n${stringifyYaml(frontmatter).trim()}\n---\n\n## 背景\n\n${objective.description || "请补充该目标的背景说明。"}\n\n## 关键结果\n\n${OKR_KR_LIST_START}\n（插件自动渲染 KR 列表，勿手动编辑此区域）\n${OKR_KR_LIST_END}\n`;
+		return `---\n${stringifyYaml(frontmatter).trim()}\n---\n\n## ${this.t("template.backgroundHeading")}\n\n${objective.description || this.t("template.backgroundPlaceholder")}\n\n## ${this.t("template.keyResultsHeading")}\n\n${OKR_KR_LIST_START}\n${this.t("template.autoRenderKrList")}\n${OKR_KR_LIST_END}\n`;
+	}
+
+	private t(key: string, values?: Record<string, TranslationValue>): string {
+		return this.i18n.t(key, values);
 	}
 }

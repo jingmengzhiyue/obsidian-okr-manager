@@ -53,7 +53,6 @@ export interface CheckIn {
 
 export interface OKRPluginSettings {
 	rootDir: string; // default: "OKR"
-	checkInsDir: string; // default: "OKR/Check-ins"
 	defaultPeriodType: OKRPeriodType;
 	autoComputeProgress: boolean;
 	showDashboardOnStartup: boolean;
@@ -61,7 +60,6 @@ export interface OKRPluginSettings {
 
 export const DEFAULT_SETTINGS: OKRPluginSettings = {
 	rootDir: "OKR",
-	checkInsDir: "OKR/Check-ins",
 	defaultPeriodType: "quarter",
 	autoComputeProgress: true,
 	showDashboardOnStartup: false,

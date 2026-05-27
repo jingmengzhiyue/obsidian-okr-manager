@@ -1,4 +1,5 @@
 import { App, Modal, Notice } from "obsidian";
+import { createI18n, detectLocale, type I18n } from "../i18n";
 
 interface ConfirmModalOptions {
 	title: string;
@@ -10,12 +11,14 @@ interface ConfirmModalOptions {
 
 export class ConfirmModal extends Modal {
 	private isSubmitting = false;
+	private readonly i18n: I18n;
 
 	constructor(
 		app: App,
 		private options: ConfirmModalOptions,
 	) {
 		super(app);
+		this.i18n = createI18n(detectLocale(app));
 	}
 
 	onOpen(): void {
@@ -36,13 +39,13 @@ export class ConfirmModal extends Modal {
 		const footer = contentEl.createDiv("okr-modal-footer");
 		const cancelBtn = footer.createEl("button", {
 			cls: "okr-btn-cancel",
-			text: "取消",
+			text: this.i18n.t("modals.confirm.cancel"),
 		});
 		cancelBtn.addEventListener("click", () => this.close());
 
 		const confirmBtn = footer.createEl("button", {
 			cls: "okr-btn-confirm okr-btn-danger",
-			text: this.options.confirmText ?? "确认",
+			text: this.options.confirmText ?? this.i18n.t("actions.confirm"),
 		});
 		confirmBtn.addEventListener("click", () => {
 			void this.confirm();
@@ -79,7 +82,8 @@ export class ConfirmModal extends Modal {
 			return error.message;
 		}
 
-		const action = this.options.confirmText ?? "确认";
-		return `${action}操作失败，请稍后重试`;
+		const action =
+			this.options.confirmText ?? this.i18n.t("actions.confirm");
+		return this.i18n.t("errors.confirmActionFailed", { action });
 	}
 }

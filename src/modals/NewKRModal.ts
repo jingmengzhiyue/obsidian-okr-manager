@@ -1,4 +1,5 @@
 import { App, Modal, Notice, TFile } from "obsidian";
+import { type TranslationValue } from "../i18n";
 import { OKRManager } from "../manager/OKRManager";
 import { Confidence } from "../types";
 import { getTodayLocalDate } from "../utils/date";
@@ -60,11 +61,11 @@ export class NewKRModal extends Modal {
 
 		contentEl.createEl("h2", {
 			cls: "okr-modal-title",
-			text: "新建关键结果",
+			text: this.t("modals.newKeyResult.title"),
 		});
 
 		const periodField = contentEl.createDiv("okr-field");
-		this.createRequiredLabel(periodField, "周期");
+		this.createRequiredLabel(periodField, this.t("modals.fields.period"));
 		const periodSelect = periodField.createEl("select", {
 			cls: "okr-select",
 		});
@@ -77,7 +78,9 @@ export class NewKRModal extends Modal {
 		}
 		for (const p of allPeriods) {
 			periodSelect.createEl("option", {
-				text: this.manager.getParser().formatPeriodLabel(p),
+				text: this.manager
+					.getParser()
+					.formatPeriodLabel(p, undefined, this.manager.getI18n()),
 				value: p,
 			});
 		}
@@ -87,7 +90,7 @@ export class NewKRModal extends Modal {
 		});
 
 		const objField = contentEl.createDiv("okr-field");
-		this.createRequiredLabel(objField, "所属 Objective");
+		this.createRequiredLabel(objField, this.t("modals.newKeyResult.ownedByObjective"));
 		const objSelect = objField.createEl("select", { cls: "okr-select" });
 		this.renderObjectiveOptions(objSelect);
 		objSelect.value = this.objectiveId;
@@ -97,11 +100,11 @@ export class NewKRModal extends Modal {
 		});
 
 		const titleField = contentEl.createDiv("okr-field");
-		this.createRequiredLabel(titleField, "标题");
+		this.createRequiredLabel(titleField, this.t("modals.fields.title"));
 		const titleInput = titleField.createEl("input", {
 			cls: "okr-input",
 			type: "text",
-			placeholder: "例如：NPS 提升至 60",
+			placeholder: this.t("modals.newKeyResult.placeholder"),
 		});
 		titleInput.addEventListener("input", () => {
 			this.title = titleInput.value.trim();
@@ -109,7 +112,7 @@ export class NewKRModal extends Modal {
 		});
 
 		const ownerField = contentEl.createDiv("okr-field");
-		this.createRequiredLabel(ownerField, "负责人");
+		this.createRequiredLabel(ownerField, this.t("modals.fields.owner"));
 		const ownerInput = ownerField.createEl("input", {
 			cls: "okr-input",
 			type: "text",
@@ -120,19 +123,25 @@ export class NewKRModal extends Modal {
 		});
 
 		const unitField = contentEl.createDiv("okr-field");
-		unitField.createEl("label", { cls: "okr-label", text: "进度单位" });
+		unitField.createEl("label", {
+			cls: "okr-label",
+			text: this.t("modals.fields.unit"),
+		});
 		const unitSelect = unitField.createEl("select", { cls: "okr-select" });
-		unitSelect.createEl("option", { text: "分数 (score)", value: "score" });
 		unitSelect.createEl("option", {
-			text: "百分比 (percentage)",
+			text: `${this.t("modals.select.score")} (score)`,
+			value: "score",
+		});
+		unitSelect.createEl("option", {
+			text: `${this.t("modals.select.percentage")} (percentage)`,
 			value: "percentage",
 		});
 		unitSelect.createEl("option", {
-			text: "数值 (number)",
+			text: `${this.t("modals.select.number")} (number)`,
 			value: "number",
 		});
 		unitSelect.createEl("option", {
-			text: "布尔 (boolean)",
+			text: `${this.t("modals.select.boolean")} (boolean)`,
 			value: "boolean",
 		});
 		unitSelect.value = this.unit;
@@ -141,7 +150,10 @@ export class NewKRModal extends Modal {
 		});
 
 		const currentField = contentEl.createDiv("okr-field");
-		currentField.createEl("label", { cls: "okr-label", text: "当前值" });
+		currentField.createEl("label", {
+			cls: "okr-label",
+			text: this.t("modals.fields.currentValue"),
+		});
 		const currentInput = currentField.createEl("input", {
 			cls: "okr-input",
 			type: "number",
@@ -151,7 +163,7 @@ export class NewKRModal extends Modal {
 		currentInput.setAttribute("step", "any");
 		const currentError = currentField.createEl("div", {
 			cls: "okr-input-error",
-			text: "当前值必须是大于等于 0 的数字",
+			text: this.t("modals.input.currentError"),
 		});
 		currentInput.addEventListener("input", () => {
 			const value = Number(currentInput.value);
@@ -169,7 +181,10 @@ export class NewKRModal extends Modal {
 		});
 
 		const targetField = contentEl.createDiv("okr-field");
-		this.createRequiredLabel(targetField, "目标值");
+		this.createRequiredLabel(
+			targetField,
+			this.t("modals.fields.targetValue"),
+		);
 		const targetInput = targetField.createEl("input", {
 			cls: "okr-input",
 			type: "number",
@@ -179,7 +194,7 @@ export class NewKRModal extends Modal {
 		targetInput.setAttribute("step", "any");
 		const targetError = targetField.createEl("div", {
 			cls: "okr-input-error",
-			text: "目标值必须是大于等于 0 的数字",
+			text: this.t("modals.input.targetError"),
 		});
 		targetInput.addEventListener("input", () => {
 			const value = Number(targetInput.value);
@@ -197,18 +212,30 @@ export class NewKRModal extends Modal {
 		});
 
 		const confField = contentEl.createDiv("okr-field");
-		confField.createEl("label", { cls: "okr-label", text: "信心度" });
+		confField.createEl("label", {
+			cls: "okr-label",
+			text: this.t("modals.fields.confidence"),
+		});
 		const confSelect = confField.createEl("select", { cls: "okr-select" });
-		confSelect.createEl("option", { text: "低", value: "low" });
-		confSelect.createEl("option", { text: "中", value: "medium" });
-		confSelect.createEl("option", { text: "高", value: "high" });
+		confSelect.createEl("option", {
+			text: this.t("modals.select.low"),
+			value: "low",
+		});
+		confSelect.createEl("option", {
+			text: this.t("modals.select.medium"),
+			value: "medium",
+		});
+		confSelect.createEl("option", {
+			text: this.t("modals.select.high"),
+			value: "high",
+		});
 		confSelect.value = this.confidence;
 		confSelect.addEventListener("change", () => {
 			this.confidence = confSelect.value as Confidence;
 		});
 
 		const dueField = contentEl.createDiv("okr-field");
-		this.createRequiredLabel(dueField, "截止日期");
+		this.createRequiredLabel(dueField, this.t("modals.fields.dueDate"));
 		const dueInput = dueField.createEl("input", {
 			cls: "okr-input",
 			type: "date",
@@ -220,10 +247,13 @@ export class NewKRModal extends Modal {
 		});
 
 		const descField = contentEl.createDiv("okr-field");
-		descField.createEl("label", { cls: "okr-label", text: "描述" });
+		descField.createEl("label", {
+			cls: "okr-label",
+			text: this.t("modals.fields.description"),
+		});
 		const descInput = descField.createEl("textarea", {
 			cls: "okr-textarea",
-			placeholder: "详细说明...",
+			placeholder: this.t("modals.fields.description"),
 		});
 		descInput.addEventListener("input", () => {
 			this.description = descInput.value.trim();
@@ -232,13 +262,13 @@ export class NewKRModal extends Modal {
 		const footer = contentEl.createDiv("okr-modal-footer");
 		const cancelBtn = footer.createEl("button", {
 			cls: "okr-btn-cancel",
-			text: "取消",
+			text: this.t("actions.cancel"),
 		});
 		cancelBtn.addEventListener("click", () => this.close());
 
 		const confirmBtn = footer.createEl("button", {
 			cls: "okr-btn-confirm",
-			text: "创建",
+			text: this.t("actions.create"),
 			attr: { disabled: "true", type: "button" },
 		});
 		confirmBtn.addEventListener("click", () => {
@@ -303,14 +333,18 @@ export class NewKRModal extends Modal {
 				await this.app.workspace.openLinkText(file.path, "", false);
 			}
 
-			new Notice(`已创建 Key Result：${kr.title}`);
+			new Notice(
+				this.t("modals.newKeyResult.created", { title: kr.title }),
+			);
 			this.options.onComplete?.();
 			this.close();
 		} catch (error) {
 			new Notice(
 				error instanceof Error
-					? `创建 Key Result 失败：${error.message}`
-					: "创建 Key Result 失败",
+					? this.t("modals.newKeyResult.createFailedWithReason", {
+							message: error.message,
+						})
+					: this.t("modals.newKeyResult.createFailed"),
 			);
 		} finally {
 			this.isSubmitting = false;
@@ -347,7 +381,7 @@ export class NewKRModal extends Modal {
 		select.empty();
 		if (this.objectives.length === 0) {
 			select.createEl("option", {
-				text: "当前周期暂无目标",
+				text: this.t("modals.newKeyResult.noObjectives"),
 				value: "",
 			});
 			select.disabled = true;
@@ -368,5 +402,12 @@ export class NewKRModal extends Modal {
 		const label = container.createEl("label", { cls: "okr-label" });
 		label.appendText(text);
 		label.createEl("span", { cls: "okr-required", text: "*" });
+	}
+
+	private t(
+		key: string,
+		values?: Record<string, TranslationValue>,
+	): string {
+		return this.manager.getI18n().t(key, values);
 	}
 }

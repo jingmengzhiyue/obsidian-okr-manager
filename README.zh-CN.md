@@ -1,73 +1,94 @@
-# OKR Manager
+<div align="center">
 
-直接在 Obsidian Vault 中管理 OKR，用更整洁的文件结构、更顺滑的 Dashboard 和内置 Check-in 流程来追踪目标进展。
+# Vault OKR Manager
 
-![Obsidian](https://img.shields.io/badge/Obsidian-%3E%3D1.4.0-blueviolet)
+在 Obsidian Vault 中直接规划、追踪和复盘 OKR，提供专用 Dashboard、内嵌进度历史，以及完全本地的 Markdown 存储。
+
+![Obsidian](https://img.shields.io/badge/Obsidian-%3E%3D1.4.4-blueviolet)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Version](https://img.shields.io/badge/version-0.1.0-blue)
+![Version](https://img.shields.io/badge/version-0.1.5-blue)
 
-[English README](./README.md)
+[English README](./README.md) · [功能特性](#功能特性) · [安装方法](#安装方法) · [快速开始](#快速开始) · [使用说明](#使用说明) · [常见问题](#常见问题)
+
+</div>
 
 ---
 
-> 截图 TODO：建议添加一张 Dashboard 截图或一个简短 GIF 演示。
+> 截图 TODO：建议至少补一张 Dashboard 截图和一段拖拽排序的短 GIF。
 
 ## 简介
 
-OKR Manager 是一个 Obsidian 社区插件，用来在你的 Vault 中创建、管理和回顾 Objective 与 Key Result。
+Vault OKR Manager 是一个 Obsidian 社区插件，用于在你的 Vault 中管理 Objective 和 Key Result。
 
-它的核心设计是：
+当前版本的核心存储模型是：
 
 - 一个 Objective 对应一个 Markdown 文件
-- 该 Objective 下的所有 KR 都保存在同一个文件中
-- Check-in 仍然独立保存，便于追踪历史
-- 数据完全本地，不依赖数据库或在线服务
+- 该 Objective 下的所有 KR 都保存在同一个文件里
+- 每个 KR 的进度历史也内嵌保存在同一个 Objective 文件中
 
-这样可以明显减少文件数量，让目录更整洁，并降低 Dashboard 的读取开销。
+这种方式比“每个 KR 一个文件”或“每次 Check-in 一个文件”更整洁，也更符合长期维护、同步和版本管理的需要。
+
+插件坚持本地优先：
+
+- 不依赖外部数据库
+- 不依赖云服务
+- 不包含隐藏遥测
+- 不会把 Vault 数据发送到外部
 
 ## 功能特性
 
-- 每个 Objective 只保留一个文件，KR 内嵌存储
-- Dashboard 统一查看各周期目标、关键结果和进度
+- 每个 Objective 只保留一个文件，KR 与进度历史均内嵌存储
+- Dashboard 统一查看各周期目标、关键结果、进度和超期状态
 - 支持周、月、季度、年四种周期
 - 自动计算 KR 与 Objective 进度
-- 内置 Check-in 记录流程
-- 支持 `score`、`percentage`、`number`、`boolean` 四种 KR 单位
-- 自动适配 Obsidian 深色和浅色主题
-- 纯 Markdown 本地存储，方便同步与版本管理
+- 内置进度记录流程，支持同一天多次更新
+- Dashboard 中支持拖拽排序关键结果
+- 支持超期提醒与截止日期延期
+- 默认英文，支持简体中文界面
+- 纯 Markdown 本地存储，适合同步和 Git 管理
+
+## 系统要求
+
+| 项目 | 要求 |
+|------|------|
+| Obsidian | `1.4.4` 及以上 |
+| 平台 | Windows / macOS / Linux / iOS / Android |
+| 插件 ID | `vault-okr-manager` |
+| 桌面独占 | `false` |
 
 ## 安装方法
 
 ### 通过社区插件市场安装
 
-当插件进入官方社区插件目录后：
+如果插件已经进入 Obsidian 官方社区插件目录：
 
-1. 打开 Obsidian
-2. 进入 **设置 → 第三方插件**
-3. 若安全模式开启，先关闭
-4. 点击 **浏览**
-5. 搜索 `OKR Manager`
-6. 安装并启用插件
+1. 打开 Obsidian。
+2. 进入 **Settings → Community plugins**。
+3. 如果安全模式开启，先关闭。
+4. 选择 **Browse**。
+5. 搜索 `Vault OKR Manager`。
+6. 安装插件。
+7. 启用插件。
 
 ### 手动安装
 
 1. 打开最新 Release 页面：[Releases](https://github.com/jingmengzhiyue/obsidian-okr-manager/releases/latest)
-2. 下载：
+2. 下载以下发布文件：
    - `main.js`
    - `manifest.json`
    - `styles.css`
-3. 打开你的 Vault 目录
-4. 进入 `.obsidian/plugins/`
-5. 创建 `okr-manager` 文件夹
-6. 把上述文件复制进去
-7. 重启 Obsidian 或重新加载社区插件
-8. 在 **设置 → 第三方插件** 中启用 `OKR Manager`
+3. 打开你的 Vault 目录。
+4. 进入 `.obsidian/plugins/`。
+5. 创建文件夹 `vault-okr-manager`。
+6. 将上述三个文件复制进去。
+7. 重启 Obsidian，或重新加载社区插件。
+8. 在 **Settings → Community plugins** 中启用 **Vault OKR Manager**。
 
 ```text
 你的 Vault/
 └── .obsidian/
     └── plugins/
-        └── okr-manager/
+        └── vault-okr-manager/
             ├── main.js
             ├── manifest.json
             └── styles.css
@@ -77,85 +98,92 @@ OKR Manager 是一个 Obsidian 社区插件，用来在你的 Vault 中创建、
 
 ### 1. 检查默认设置
 
-进入 **设置 → OKR Manager**，确认这些默认值：
+打开 **Settings → Vault OKR Manager**，确认这些默认值：
 
 | 设置项 | 默认值 | 说明 |
 |------|------|------|
-| `OKR 根目录` | `OKR` | Objective 文件根目录 |
-| `Check-in 目录` | `OKR/Check-ins` | Check-in 文件目录 |
-| `默认周期类型` | `quarter` | 新建 Objective 的默认周期类型 |
-| `自动计算进度` | `true` | 依据当前值和目标值自动计算进度 |
-| `启动时打开 Dashboard` | `false` | 启动时自动打开 Dashboard |
+| `Objective directory` | `OKR` | 所有目标文件的根目录 |
+| `Default period type` | `quarter` | 新建目标时默认使用的周期类型 |
+| `Auto-calculate progress` | `true` | 当前值或目标值变化时自动重算进度 |
+| `Open dashboard on startup` | `false` | 启动 Obsidian 时自动打开 Dashboard |
 
 ### 2. 创建第一个 Objective
 
-1. 用 `Ctrl+P` 或 `Cmd+P` 打开命令面板
-2. 执行 `新建 Objective`
+1. 用 `Ctrl+P` 或 `Cmd+P` 打开命令面板。
+2. 执行 **New objective**。
 3. 选择周期类型：
-   - 周
-   - 月
-   - 季度
-   - 年
+   - Week
+   - Month
+   - Quarter
+   - Year
 4. 输入周期值，例如：
    - 周：`2026-W20`
    - 月：`2026-05`
    - 季度：`2026-Q2`
    - 年：`2026`
-5. 输入标题、负责人和截止日期
-6. 点击 **创建**
+5. 输入标题、负责人、描述和截止日期。
+6. 点击 **Create**。
 
 插件会创建类似 `OKR/2026-Q2/O1.md` 的文件。
 
 ### 3. 添加 Key Result
 
-1. 执行 `新建 Key Result`
-2. 选择周期和所属 Objective
-3. 输入 KR 标题、负责人、单位、当前值、目标值和信心等级
-4. 点击 **创建**
+1. 执行 **New key result**。
+2. 选择周期和所属 Objective。
+3. 输入 KR 标题、负责人、单位、当前值、目标值、信心等级，以及需要时的截止日期。
+4. 点击 **Create**。
 
-此时不会生成单独的 KR 文件，而是直接写入 Objective 文件。
+此时不会生成单独的 KR 文件，而是直接写入对应的 Objective 文件。
 
-### 4. 记录 Check-in
+### 4. 记录进度
 
-1. 执行 `记录 Check-in 进度`
-2. 选择 KR
-3. 输入当前值或直接调整进度
-4. 可选填写进展说明和阻碍
-5. 保存
+1. 执行 **Record progress**。
+2. 选择一个 KR。
+3. 输入最新当前值，或直接调整进度百分比。
+4. 可选填写进展说明和阻碍因素。
+5. 保存更新。
+
+进度历史会保存在对应 KR 的内嵌 `checkIns` 数组中，因此同一天也可以多次记录，不会额外生成文件。
 
 ### 5. 打开 Dashboard
 
-1. 执行 `打开 OKR Dashboard`
-2. 在右侧边栏查看当前周期目标、KR 和进度
+1. 执行 **Open dashboard**。
+2. 在侧边栏查看目标、关键结果、进度、截止日期与超期状态。
+3. 需要时可直接拖拽 KR 调整顺序。
 
 ## 使用说明
 
-### 默认目录结构
+### 当前存储结构
+
+默认情况下，目录结构类似这样：
 
 ```text
 OKR/
-├── 2026-Q2/
-│   ├── O1.md
-│   └── O2.md
-└── Check-ins/
-    ├── 2026-05-09-O1-KR1.md
-    └── 2026-05-16-O1-KR1.md
+└── 2026-Q2/
+    ├── O1.md
+    └── O2.md
 ```
 
-与传统“每个 KR 一个文件”的模式相比：
+当前版本不再创建：
 
-- 所有 KR 都保存在 Objective 文件中
-- 文件数量显著减少
-- Dashboard 加载更快
+- 每个 KR 一个独立文件
+- 每次 Check-in 一个独立文件
+- 专门的 `Check-ins` 目录设置项
+
+现在所有相关数据都聚合在 Objective 文件中。
 
 ### 命令列表
 
+命令名称会跟随插件当前语言显示。英文环境下的命令如下：
+
 | 命令 | 用途 |
 |------|------|
-| `新建 Objective` | 创建新目标 |
-| `新建 Key Result` | 给目标添加 KR |
-| `记录 Check-in 进度` | 记录 KR 进度更新 |
-| `打开 OKR Dashboard` | 打开或聚焦 Dashboard |
+| `New objective` | 创建新目标 |
+| `New key result` | 给目标添加 KR |
+| `Record progress` | 记录 KR 进度更新 |
+| `Open dashboard` | 打开或聚焦 OKR Dashboard |
+
+如果 Obsidian 当前使用简体中文，插件界面和命令名称会自动切换为中文。
 
 ### 周期格式
 
@@ -172,7 +200,8 @@ OKR/
 
 - Objective 元数据
 - `key-results` 数组
-- 供插件渲染 KR 表格的保留区域
+- 每个 KR 内嵌的 `checkIns` 历史
+- 插件渲染 KR 内容的保留区域
 
 示例：
 
@@ -184,13 +213,22 @@ okr-period: 2026-Q2
 okr-period-type: quarter
 title: 提升工程质量
 owner: 团队负责人
+status: active
 progress: 68
+due: 2026-06-30
 key-results:
   - okr-id: O1-KR1
     title: 代码评审覆盖率达到 100%
     current: 80
     target: 100
     progress: 80
+    order: 0
+    checkIns:
+      - id: O1-KR1-1740000000000
+        date: 2026-05-18
+        progress: 80
+        delta: 10
+        note: 已提升后端模块代码评审覆盖率
 ---
 ```
 
@@ -208,25 +246,55 @@ Objective 进度：
 - 取所有未取消 KR 的平均值
 - 没有有效 KR 时为 `0%`
 
+### KR 排序
+
+- Dashboard 支持拖拽排序关键结果。
+- 新顺序会持久化写回 Objective 文件。
+- 详情视图仍保留移动操作作为兜底交互。
+
+### 超期目标
+
+当 Objective 超过截止日期且状态不是完成或取消时，插件会：
+
+- 标记为超期
+- 在 Dashboard 中显示提醒
+- 用视觉样式突出风险状态
+- 提供延期入口以更新截止日期
+
+### 语言行为
+
+- 默认语言：英文
+- 支持语言：简体中文（`zh-CN`）
+- 未识别或未支持的语言会回退到英文
+- 切换界面语言不会自动改写已存在的 Markdown 笔记内容
+
 ### 旧数据模型说明
 
-当前版本不兼容旧的“每个 KR 一个文件”的数据结构。
+当前版本不兼容以下旧原型模型：
 
-如果你以前用过本地原型版本：
+- 每个 KR 一个独立 Markdown 文件
+- 每次进度记录一个独立 Check-in 文件
+- 在设置页中配置独立的 Check-in 目录
 
-- 旧 KR 文件不会自动迁移
-- 新版本不会主动读取它们
-- 需要手动整理到新的 Objective 文件中
+如果你过去使用过旧原型，需要手动将数据整理到当前的 Objective 聚合结构中。
 
 ## 常见问题
 
-### 为什么现在不会给每个 KR 单独建文件？
+### 现在还会给每个 KR 单独建文件吗？
 
-因为插件已经切换到“单 Objective 文件聚合 KR”的模型，这样可以减少文件杂乱并提升性能。
+不会。KR 已经内嵌在 Objective 文件中。
 
-### 为什么点击 KR 打开的是 Objective 文件？
+### 现在还会创建 `Check-ins` 文件夹吗？
 
-因为 KR 现在内嵌在 Objective 文件中，不再拥有独立文件。
+不会。进度历史保存在 Objective 文件里每个 KR 的 `checkIns` 字段中。
+
+### 同一天可以记录多次进度吗？
+
+可以。当前版本支持同一天多次记录。
+
+### Objective 超期后会怎样？
+
+Dashboard 会显示超期提醒和状态标识，你也可以直接从界面里延期截止日期。
 
 ### 会上传数据到云端吗？
 
@@ -235,10 +303,6 @@ Objective 进度：
 ### 可以不用季度，改用周或月吗？
 
 可以。插件支持周、月、季度、年四种周期。
-
-### `target = 0` 会导致报错吗？
-
-不会，插件会把进度安全处理为 `0%`。
 
 ### 支持手机端吗？
 
@@ -253,12 +317,29 @@ npm install
 npm run dev
 ```
 
+常用命令：
+
+```bash
+npm run build
+npm run lint
+npm test
+```
+
 发布前请确认：
 
 1. 更新 `manifest.json`
-2. 更新 `versions.json`
-3. 运行 `npm run build`
-4. 在 GitHub Release 中上传 `main.js`、`manifest.json`、`styles.css`
+2. 更新 `package.json`
+3. 更新 `versions.json`
+4. 运行 `npm run build`
+5. 在 GitHub Release 中单独上传 `main.js`、`manifest.json`、`styles.css`
+
+## 隐私与数据
+
+Vault OKR Manager 完全在本地运行：
+
+- 不执行远程代码
+- 不包含隐藏遥测
+- 不依赖外部 API
 
 ## 许可证
 

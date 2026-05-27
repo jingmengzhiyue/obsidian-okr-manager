@@ -1,4 +1,5 @@
 import { App, Modal, Notice } from "obsidian";
+import { type TranslationValue } from "../i18n";
 import { OKRManager } from "../manager/OKRManager";
 import { KeyResult } from "../types";
 import { getTodayLocalDate } from "../utils/date";
@@ -37,7 +38,7 @@ export class CheckInModal extends Modal {
 
 		contentEl.createEl("h2", {
 			cls: "okr-modal-title",
-			text: "记录进度",
+			text: this.t("modals.checkIn.title"),
 		});
 
 		this.krs = await this.loadAllKeyResults();
@@ -47,11 +48,11 @@ export class CheckInModal extends Modal {
 		this.syncSelectedKRValues();
 
 		const krField = contentEl.createDiv("okr-field");
-		this.createRequiredLabel(krField, "关键结果");
+		this.createRequiredLabel(krField, this.t("modals.checkIn.selectKeyResult"));
 		const krSelect = krField.createEl("select", { cls: "okr-select" });
 		if (this.krs.length === 0) {
 			krSelect.createEl("option", {
-				text: "暂无可记录的关键结果",
+				text: this.t("modals.checkIn.noKeyResults"),
 				value: "",
 			});
 			krSelect.disabled = true;
@@ -75,7 +76,7 @@ export class CheckInModal extends Modal {
 		});
 
 		const dateField = contentEl.createDiv("okr-field");
-		this.createRequiredLabel(dateField, "日期");
+		this.createRequiredLabel(dateField, this.t("modals.checkIn.date"));
 		const dateInput = dateField.createEl("input", {
 			cls: "okr-input",
 			type: "date",
@@ -87,7 +88,7 @@ export class CheckInModal extends Modal {
 		});
 
 		const currentField = contentEl.createDiv("okr-field");
-		this.createRequiredLabel(currentField, "当前值");
+		this.createRequiredLabel(currentField, this.t("modals.checkIn.value"));
 		const currentInput = currentField.createEl("input", {
 			cls: "okr-input",
 			type: "number",
@@ -95,7 +96,7 @@ export class CheckInModal extends Modal {
 		});
 		const currentError = currentField.createEl("div", {
 			cls: "okr-input-error",
-			text: "当前值必须是大于等于 0 的数字",
+			text: this.t("modals.checkIn.currentError"),
 		});
 		currentInput.setAttribute("step", "any");
 		currentInput.setAttribute("min", "0");
@@ -120,7 +121,10 @@ export class CheckInModal extends Modal {
 		});
 
 		const progressField = contentEl.createDiv("okr-field");
-		this.createRequiredLabel(progressField, "进度 (%)");
+		this.createRequiredLabel(
+			progressField,
+			this.t("modals.checkIn.progress"),
+		);
 		const progressInput = progressField.createEl("input", {
 			cls: "okr-input",
 			type: "number",
@@ -131,7 +135,7 @@ export class CheckInModal extends Modal {
 		progressInput.value = String(this.progress);
 		const progressError = progressField.createEl("div", {
 			cls: "okr-input-error",
-			text: "进度必须是 0 到 100 之间的整数",
+			text: this.t("modals.checkIn.progressError"),
 		});
 		progressInput.addEventListener("input", () => {
 			const value = Number(progressInput.value);
@@ -181,20 +185,26 @@ export class CheckInModal extends Modal {
 		});
 
 		const noteField = contentEl.createDiv("okr-field");
-		noteField.createEl("label", { cls: "okr-label", text: "本次进展" });
+		noteField.createEl("label", {
+			cls: "okr-label",
+			text: this.t("modals.checkIn.note"),
+		});
 		const noteInput = noteField.createEl("textarea", {
 			cls: "okr-textarea",
-			placeholder: "这周做了什么...",
+			placeholder: this.t("modals.checkIn.notePlaceholder"),
 		});
 		noteInput.addEventListener("input", () => {
 			this.note = noteInput.value.trim();
 		});
 
 		const blockerField = contentEl.createDiv("okr-field");
-		blockerField.createEl("label", { cls: "okr-label", text: "阻碍因素" });
+		blockerField.createEl("label", {
+			cls: "okr-label",
+			text: this.t("modals.checkIn.blocker"),
+		});
 		const blockerInput = blockerField.createEl("textarea", {
 			cls: "okr-textarea",
-			placeholder: "遇到了什么问题...",
+			placeholder: this.t("modals.checkIn.blockerPlaceholder"),
 		});
 		blockerInput.addEventListener("input", () => {
 			this.blocker = blockerInput.value.trim();
@@ -203,13 +213,13 @@ export class CheckInModal extends Modal {
 		const footer = contentEl.createDiv("okr-modal-footer");
 		const cancelBtn = footer.createEl("button", {
 			cls: "okr-btn-cancel",
-			text: "取消",
+			text: this.t("actions.cancel"),
 		});
 		cancelBtn.addEventListener("click", () => this.close());
 
 		const confirmBtn = footer.createEl("button", {
 			cls: "okr-btn-confirm",
-			text: "保存",
+			text: this.t("actions.save"),
 			attr: { disabled: "true", type: "button" },
 		});
 		confirmBtn.addEventListener("click", () => {
@@ -262,14 +272,21 @@ export class CheckInModal extends Modal {
 				blocker: this.blocker,
 			});
 
-			new Notice(`已记录进度：${this.krId} ${this.progress}%`);
+			new Notice(
+				this.t("modals.checkIn.saved", {
+					krId: this.krId,
+					progress: this.progress,
+				}),
+			);
 			this.options.onComplete?.();
 			this.close();
 		} catch (error) {
 			new Notice(
 				error instanceof Error
-					? `记录进度失败：${error.message}`
-					: "记录进度失败",
+					? this.t("modals.checkIn.saveFailedWithReason", {
+							message: error.message,
+						})
+					: this.t("modals.checkIn.saveFailed"),
 			);
 		} finally {
 			this.isSubmitting = false;
@@ -340,5 +357,12 @@ export class CheckInModal extends Modal {
 		const label = container.createEl("label", { cls: "okr-label" });
 		label.appendText(text);
 		label.createEl("span", { cls: "okr-required", text: "*" });
+	}
+
+	private t(
+		key: string,
+		values?: Record<string, TranslationValue>,
+	): string {
+		return this.manager.getI18n().t(key, values);
 	}
 }

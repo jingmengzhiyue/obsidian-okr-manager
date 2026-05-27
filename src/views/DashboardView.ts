@@ -15,7 +15,10 @@ import { NewKRModal } from "../modals/NewKRModal";
 import { NewObjectiveModal } from "../modals/NewObjectiveModal";
 import { PostponeObjectiveModal } from "../modals/PostponeObjectiveModal";
 import { KeyResult, Objective } from "../types";
-import { getObjectiveDeadlineState } from "../utils/objectiveStatus";
+import {
+	getObjectiveDeadlineState,
+	getObjectiveStatusLabel,
+} from "../utils/objectiveStatus";
 import { reorderKeyResultOrders } from "../utils/sort";
 
 export const DASHBOARD_VIEW_TYPE = "okr-dashboard";
@@ -43,7 +46,7 @@ export class DashboardView extends ItemView {
 		return DASHBOARD_VIEW_TYPE;
 	}
 	getDisplayText(): string {
-		return "仪表盘";
+		return this.manager.getI18n().t("dashboard.title");
 	}
 	getIcon(): string {
 		return "target";
@@ -97,8 +100,10 @@ export class DashboardView extends ItemView {
 		} catch (error) {
 			new Notice(
 				error instanceof Error
-					? `加载仪表盘失败：${error.message}`
-					: "加载仪表盘失败",
+					? this.t("dashboard.loadFailedWithReason", {
+							message: error.message,
+						})
+					: this.t("dashboard.loadFailed"),
 			);
 			this.renderErrorState(container);
 		}
@@ -122,18 +127,26 @@ export class DashboardView extends ItemView {
 		const toolbar = container.createDiv("okr-toolbar");
 		const left = toolbar.createDiv("okr-toolbar-left");
 		left.createEl("span", { cls: "okr-logo", text: "◎" });
-		left.createEl("span", { cls: "okr-title", text: "OKR" });
+		left.createEl("span", {
+			cls: "okr-title",
+			text: this.t("common.okr"),
+		});
 
 		const right = toolbar.createDiv("okr-toolbar-right");
 		const select = right.createEl("select", { cls: "okr-period-select" });
 		if (periods.length === 0) {
-			select.createEl("option", { value: "", text: "暂无周期" });
+			select.createEl("option", {
+				value: "",
+				text: this.t("dashboard.noPeriods"),
+			});
 			select.disabled = true;
 		} else {
 			for (const period of periods) {
 				const option = select.createEl("option", {
 					value: period,
-					text: this.manager.getParser().formatPeriodLabel(period),
+					text: this.manager
+						.getParser()
+						.formatPeriodLabel(period, undefined, this.manager.getI18n()),
 				});
 				option.selected = period === this.currentPeriod;
 			}
@@ -147,8 +160,8 @@ export class DashboardView extends ItemView {
 			cls: "okr-btn-icon",
 			text: "＋",
 		});
-		addButton.setAttribute("title", "新建目标");
-		addButton.setAttribute("aria-label", "新建目标");
+		addButton.setAttribute("title", this.t("actions.newObjective"));
+		addButton.setAttribute("aria-label", this.t("actions.newObjective"));
 		addButton.addEventListener("click", () => this.openNewObjectiveModal());
 	}
 
@@ -169,14 +182,22 @@ export class DashboardView extends ItemView {
 						) / totalObjectives,
 					);
 
-		this.renderSummaryItem(summaryBar, String(totalObjectives), "目标");
+		this.renderSummaryItem(
+			summaryBar,
+			String(totalObjectives),
+			this.t("dashboard.objectives"),
+		);
 		summaryBar.createDiv("okr-summary-divider");
-		this.renderSummaryItem(summaryBar, String(totalKeyResults), "关键结果");
+		this.renderSummaryItem(
+			summaryBar,
+			String(totalKeyResults),
+			this.t("dashboard.keyResults"),
+		);
 		summaryBar.createDiv("okr-summary-divider");
 		this.renderSummaryItem(
 			summaryBar,
 			`${averageProgress}%`,
-			"平均进度",
+			this.t("dashboard.averageProgress"),
 			true,
 		);
 	}
@@ -209,7 +230,11 @@ export class DashboardView extends ItemView {
 
 	private renderObjectiveCard(container: HTMLElement, obj: Objective): void {
 		const card = container.createDiv("okr-obj-card");
-		const deadlineState = getObjectiveDeadlineState(obj);
+		const deadlineState = getObjectiveDeadlineState(
+			obj,
+			undefined,
+			this.manager.getI18n(),
+		);
 		if (deadlineState.tone === "overdue") {
 			card.addClass("is-overdue");
 		}
@@ -222,7 +247,10 @@ export class DashboardView extends ItemView {
 		const collapseBtn = headerLeft.createEl("button", {
 			cls: `okr-collapse-btn${isCollapsed ? " okr-collapsed" : ""}`,
 		});
-		collapseBtn.setAttribute("aria-label", isCollapsed ? "展开" : "折叠");
+		collapseBtn.setAttribute(
+			"aria-label",
+			isCollapsed ? this.t("actions.expand") : this.t("actions.collapse"),
+		);
 		setIcon(collapseBtn, "chevron-right");
 		collapseBtn.addEventListener("click", (event) => {
 			event.stopPropagation();
@@ -242,20 +270,14 @@ export class DashboardView extends ItemView {
 		title.addEventListener("click", () => {
 			void this.openFile(
 				obj.filePath,
-				"Objective 文件不存在，可能已被手动删除",
+				this.t("dashboard.objectiveFileMissing"),
 			);
 		});
 
 		const headerRight = header.createDiv("okr-obj-header-right");
-		const statusMap: Record<string, string> = {
-			active: "进行中",
-			completed: "已完成",
-			cancelled: "已取消",
-			"on-hold": "暂停中",
-		};
 		headerRight.createEl("span", {
 			cls: `okr-badge okr-status-${obj.status}`,
-			text: statusMap[obj.status] ?? obj.status,
+			text: getObjectiveStatusLabel(obj.status, this.manager.getI18n()),
 		});
 		headerRight.createEl("span", {
 			cls: "okr-progress-num",
@@ -265,7 +287,7 @@ export class DashboardView extends ItemView {
 			cls: "okr-btn-icon okr-more-btn",
 			text: "⋯",
 		});
-		moreBtn.setAttribute("aria-label", "更多操作");
+		moreBtn.setAttribute("aria-label", this.t("actions.moreActions"));
 		moreBtn.addEventListener("click", (event) => {
 			event.stopPropagation();
 			this.openObjectiveMenu(event, obj);
@@ -293,7 +315,7 @@ export class DashboardView extends ItemView {
 		const addKrRow = krList.createDiv("okr-add-kr-row");
 		const addKrBtn = addKrRow.createEl("button", {
 			cls: "okr-add-kr-btn",
-			text: "＋ 添加关键结果",
+			text: `＋ ${this.t("actions.addKeyResult")}`,
 		});
 		addKrBtn.addEventListener("click", () => {
 			new NewKRModal(this.app, this.manager, {
@@ -316,7 +338,7 @@ export class DashboardView extends ItemView {
 		row.addEventListener("click", () => {
 			void this.openFile(
 				kr.filePath,
-				"所属 Objective 文件不存在，可能已被手动删除",
+				this.t("dashboard.objectiveFileMissing"),
 			);
 		});
 
@@ -336,7 +358,7 @@ export class DashboardView extends ItemView {
 			event.stopPropagation();
 			void this.openFile(
 				kr.filePath,
-				"所属 Objective 文件不存在，可能已被手动删除",
+				this.t("dashboard.objectiveFileMissing"),
 			);
 		});
 
@@ -358,8 +380,11 @@ export class DashboardView extends ItemView {
 			cls: "okr-checkin-btn",
 			text: "↑",
 		});
-		checkInButton.setAttribute("aria-label", "记录进度");
-		checkInButton.setAttribute("title", "记录进度");
+		checkInButton.setAttribute(
+			"aria-label",
+			this.t("actions.recordCheckIn"),
+		);
+		checkInButton.setAttribute("title", this.t("actions.recordCheckIn"));
 		checkInButton.addEventListener("click", (event) => {
 			event.stopPropagation();
 			new CheckInModal(this.app, this.manager, {
@@ -370,9 +395,9 @@ export class DashboardView extends ItemView {
 
 		const editButton = right.createEl("button", {
 			cls: "okr-row-action-btn",
-			text: "编辑",
+			text: this.t("actions.edit"),
 		});
-		editButton.setAttribute("aria-label", "编辑关键结果");
+		editButton.setAttribute("aria-label", this.t("actions.editKeyResult"));
 		editButton.addEventListener("click", (event) => {
 			event.stopPropagation();
 			new EditKRModal(this.app, this.manager, kr, {
@@ -382,19 +407,27 @@ export class DashboardView extends ItemView {
 
 		const deleteButton = right.createEl("button", {
 			cls: "okr-row-action-btn okr-row-action-danger",
-			text: "删除",
+			text: this.t("actions.delete"),
 		});
-		deleteButton.setAttribute("aria-label", "删除关键结果");
+		deleteButton.setAttribute("aria-label", this.t("actions.delete"));
 		deleteButton.addEventListener("click", (event) => {
 			event.stopPropagation();
 			new ConfirmModal(this.app, {
-				title: `删除 ${kr.id}`,
-				message: `确认删除关键结果「${kr.title}」及其全部进度记录吗？`,
-				confirmText: "删除",
-				errorNotice: `删除关键结果失败：${kr.title}`,
+				title: `${this.t("actions.delete")} ${kr.id}`,
+				message: this.t("detail.deleteKeyResultConfirm", {
+					title: kr.title,
+				}),
+				confirmText: this.t("actions.delete"),
+				errorNotice: this.t("detail.deleteKeyResultFailed", {
+					title: kr.title,
+				}),
 				onConfirm: async () => {
 					await this.manager.deleteKeyResult(kr.id, kr.period);
-					new Notice(`已删除关键结果：${kr.title}`);
+					new Notice(
+						this.t("detail.deleteKeyResultSuccess", {
+							title: kr.title,
+						}),
+					);
 					this.scheduleRender();
 				},
 			}).open();
@@ -488,14 +521,18 @@ export class DashboardView extends ItemView {
 			void this.manager
 				.reorderKeyResult(draggedKrId, objective.period, targetIndex)
 				.then(() => {
-					new Notice("已更新关键结果顺序");
+					new Notice(this.t("dashboard.progressUpdated"));
 					this.scheduleRender();
 				})
 				.catch((error: unknown) => {
 					this.krsMap.set(objective.id, previous);
 					const message =
-						error instanceof Error ? error.message : "未知错误";
-					new Notice(`更新关键结果顺序失败：${message}`);
+						error instanceof Error
+							? error.message
+							: this.t("errors.unknown");
+					new Notice(
+						this.t("dashboard.progressUpdateFailed", { message }),
+					);
 					this.scheduleRender();
 				});
 		});
@@ -578,11 +615,11 @@ export class DashboardView extends ItemView {
 		empty.createEl("div", { cls: "okr-empty-icon", text: "◎" });
 		empty.createEl("div", {
 			cls: "okr-empty-text",
-			text: "当前周期暂无目标\n点击下方按钮创建第一个目标",
+			text: this.t("dashboard.currentPeriodHasNoObjectives"),
 		});
 		const button = empty.createEl("button", {
 			cls: "okr-empty-btn",
-			text: "＋ 新建目标",
+			text: `＋ ${this.t("actions.newObjective")}`,
 		});
 		button.addEventListener("click", () => this.openNewObjectiveModal());
 	}
@@ -591,7 +628,7 @@ export class DashboardView extends ItemView {
 		const footer = container.createDiv("okr-footer");
 		const button = footer.createEl("button", {
 			cls: "okr-btn-primary okr-add-obj-btn",
-			text: "＋ 新建目标",
+			text: `＋ ${this.t("actions.newObjective")}`,
 		});
 		button.addEventListener("click", () => this.openNewObjectiveModal());
 	}
@@ -601,7 +638,7 @@ export class DashboardView extends ItemView {
 		empty.createEl("div", { cls: "okr-empty-icon", text: "!" });
 		empty.createEl("div", {
 			cls: "okr-empty-text",
-			text: "仪表盘加载失败\n请稍后重试或检查控制台日志",
+			text: this.t("dashboard.errorState"),
 		});
 	}
 
@@ -614,7 +651,11 @@ export class DashboardView extends ItemView {
 	private renderOverdueReminder(container: HTMLElement): void {
 		const overdueObjectives = this.objectives.filter(
 			(objective) =>
-				getObjectiveDeadlineState(objective).tone === "overdue",
+				getObjectiveDeadlineState(
+					objective,
+					undefined,
+					this.manager.getI18n(),
+				).tone === "overdue",
 		);
 		if (overdueObjectives.length === 0) {
 			return;
@@ -627,11 +668,19 @@ export class DashboardView extends ItemView {
 			.slice(0, 3)
 			.map((objective) => objective.id)
 			.join("、");
-		const suffix = overdueObjectives.length > 3 ? " 等" : "";
+		const localizedTitles = titles
+			? this.t("dashboard.overdueReminderTitles", { titles })
+			: "";
+		const localizedSuffix =
+			overdueObjectives.length > 3
+				? this.t("dashboard.overdueReminderSuffix")
+				: "";
 		reminder.createEl("span", {
-			text: `当前可见目标中有 ${overdueObjectives.length} 个已超期${
-				titles ? `：${titles}` : ""
-			}${suffix}，可直接点击“延期”更新截止日期。`,
+			text: this.t("dashboard.overdueReminder", {
+				count: overdueObjectives.length,
+				titles: localizedTitles,
+				suffix: localizedSuffix,
+			}),
 		});
 	}
 
@@ -654,7 +703,7 @@ export class DashboardView extends ItemView {
 		if (deadlineState.showPostponeAction) {
 			const postponeButton = meta.createEl("button", {
 				cls: "okr-row-action-btn okr-row-action-quiet",
-				text: "延期",
+				text: this.t("actions.postpone"),
 			});
 			postponeButton.addEventListener("click", (event) => {
 				event.stopPropagation();
@@ -666,41 +715,55 @@ export class DashboardView extends ItemView {
 	private openObjectiveMenu(event: MouseEvent, objective: Objective): void {
 		const menu = new Menu();
 		menu.addItem((item) =>
-			item.setTitle("打开详情").onClick(() => {
+			item.setTitle(this.t("actions.openDetails")).onClick(() => {
 				void this.openFile(
 					objective.filePath,
-					"Objective 文件不存在，可能已被手动删除",
+					this.t("dashboard.objectiveFileMissing"),
 				);
 			}),
 		);
-		if (getObjectiveDeadlineState(objective).showPostponeAction) {
+		if (
+			getObjectiveDeadlineState(
+				objective,
+				undefined,
+				this.manager.getI18n(),
+			).showPostponeAction
+		) {
 			menu.addItem((item) =>
-				item.setTitle("延期截止日期").onClick(() => {
+				item.setTitle(this.t("actions.postponeDueDate")).onClick(() => {
 					this.openPostponeObjectiveModal(objective);
 				}),
 			);
 		}
 		menu.addItem((item) =>
-			item.setTitle("编辑目标").onClick(() => {
+			item.setTitle(this.t("actions.editObjective")).onClick(() => {
 				new EditObjectiveModal(this.app, this.manager, objective, {
 					onComplete: () => this.scheduleRender(),
 				}).open();
 			}),
 		);
 		menu.addItem((item) =>
-			item.setTitle("删除目标").onClick(() => {
+			item.setTitle(this.t("actions.delete")).onClick(() => {
 				new ConfirmModal(this.app, {
-					title: `删除 ${objective.id}`,
-					message: `确认删除目标「${objective.title}」、其全部关键结果以及关联进度记录吗？`,
-					confirmText: "删除",
-					errorNotice: `删除目标失败：${objective.title}`,
+					title: `${this.t("actions.delete")} ${objective.id}`,
+					message: this.t("detail.deleteObjectiveConfirm", {
+						title: objective.title,
+					}),
+					confirmText: this.t("actions.delete"),
+					errorNotice: this.t("detail.deleteObjectiveFailed", {
+						title: objective.title,
+					}),
 					onConfirm: async () => {
 						await this.manager.deleteObjective(
 							objective.id,
 							objective.period,
 							true,
 						);
-						new Notice(`已删除目标：${objective.title}`);
+						new Notice(
+							this.t("detail.deleteObjectiveSuccess", {
+								title: objective.title,
+							}),
+						);
 						this.scheduleRender();
 					},
 				}).open();
@@ -731,5 +794,9 @@ export class DashboardView extends ItemView {
 		new PostponeObjectiveModal(this.app, this.manager, objective, {
 			onComplete: () => this.scheduleRender(),
 		}).open();
+	}
+
+	private t(key: string, values?: Record<string, string | number>): string {
+		return this.manager.getI18n().t(key, values);
 	}
 }

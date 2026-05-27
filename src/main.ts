@@ -7,14 +7,17 @@ import { NewObjectiveModal } from "./modals/NewObjectiveModal";
 import { NewKRModal } from "./modals/NewKRModal";
 import { CheckInModal } from "./modals/CheckInModal";
 import { SettingsTab } from "./settings/SettingsTab";
+import { createI18n, detectLocale, type I18n } from "./i18n";
 
 export default class OKRPlugin extends Plugin {
 	settings!: OKRPluginSettings;
 	manager!: OKRManager;
+	i18n!: I18n;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
-		this.manager = new OKRManager(this.app, this.settings);
+		this.i18n = createI18n(detectLocale(this.app));
+		this.manager = new OKRManager(this.app, this.settings, this.i18n);
 
 		// 注册缓存失效事件（通过 registerEvent 确保插件禁用时自动清理）
 		this.registerEvent(
@@ -63,7 +66,7 @@ export default class OKRPlugin extends Plugin {
 		// 注册 Commands
 		this.addCommand({
 			id: "okr-new-objective",
-			name: "新建目标",
+			name: this.i18n.t("actions.newObjective"),
 			callback: () =>
 				new NewObjectiveModal(this.app, this.manager, () =>
 					this.refreshDashboard(),
@@ -71,7 +74,7 @@ export default class OKRPlugin extends Plugin {
 		});
 		this.addCommand({
 			id: "okr-new-kr",
-			name: "新建关键结果",
+			name: this.i18n.t("actions.newKeyResult"),
 			callback: () =>
 				new NewKRModal(this.app, this.manager, {
 					onComplete: () => this.refreshDashboard(),
@@ -79,7 +82,7 @@ export default class OKRPlugin extends Plugin {
 		});
 		this.addCommand({
 			id: "okr-check-in",
-			name: "记录进度",
+			name: this.i18n.t("actions.recordCheckIn"),
 			callback: () =>
 				new CheckInModal(this.app, this.manager, {
 					onComplete: () => this.refreshDashboard(),
@@ -87,12 +90,12 @@ export default class OKRPlugin extends Plugin {
 		});
 		this.addCommand({
 			id: "okr-open-dashboard",
-			name: "打开仪表盘",
+			name: this.i18n.t("actions.openDashboard"),
 			callback: () => this.activateDashboard(),
 		});
 
 		// Ribbon 图标
-		this.addRibbonIcon("target", "打开仪表盘", () =>
+		this.addRibbonIcon("target", this.i18n.t("actions.openDashboard"), () =>
 			this.activateDashboard(),
 		);
 

@@ -1,4 +1,5 @@
 import { App, Modal, Notice } from "obsidian";
+import { type TranslationValue } from "../i18n";
 import { OKRManager } from "../manager/OKRManager";
 import { Confidence, KeyResult } from "../types";
 
@@ -45,15 +46,19 @@ export class EditKRModal extends Modal {
 
 		contentEl.createEl("h2", {
 			cls: "okr-modal-title",
-			text: `编辑 Key Result ${this.keyResult.id}`,
+			text: this.t("modals.editKeyResult.title", {
+				id: this.keyResult.id,
+			}),
 		});
 		contentEl.createEl("div", {
 			cls: "okr-modal-subtitle",
-			text: `所属 Objective：${this.keyResult.objectiveId}`,
+			text: this.t("modals.editKeyResult.subtitle", {
+				objectiveId: this.keyResult.objectiveId,
+			}),
 		});
 
 		const titleField = contentEl.createDiv("okr-field");
-		this.createRequiredLabel(titleField, "标题");
+		this.createRequiredLabel(titleField, this.t("modals.fields.title"));
 		const titleInput = titleField.createEl("input", {
 			cls: "okr-input",
 			type: "text",
@@ -65,7 +70,7 @@ export class EditKRModal extends Modal {
 		});
 
 		const ownerField = contentEl.createDiv("okr-field");
-		this.createRequiredLabel(ownerField, "负责人");
+		this.createRequiredLabel(ownerField, this.t("modals.fields.owner"));
 		const ownerInput = ownerField.createEl("input", {
 			cls: "okr-input",
 			type: "text",
@@ -77,33 +82,54 @@ export class EditKRModal extends Modal {
 		});
 
 		const statusField = contentEl.createDiv("okr-field");
-		statusField.createEl("label", { cls: "okr-label", text: "状态" });
+		statusField.createEl("label", {
+			cls: "okr-label",
+			text: this.t("modals.fields.status"),
+		});
 		const statusSelect = statusField.createEl("select", {
 			cls: "okr-select",
 		});
-		statusSelect.createEl("option", { text: "进行中", value: "active" });
-		statusSelect.createEl("option", { text: "已完成", value: "completed" });
-		statusSelect.createEl("option", { text: "暂停中", value: "on-hold" });
-		statusSelect.createEl("option", { text: "已取消", value: "cancelled" });
+		statusSelect.createEl("option", {
+			text: this.t("status.active"),
+			value: "active",
+		});
+		statusSelect.createEl("option", {
+			text: this.t("status.completed"),
+			value: "completed",
+		});
+		statusSelect.createEl("option", {
+			text: this.t("status.on-hold"),
+			value: "on-hold",
+		});
+		statusSelect.createEl("option", {
+			text: this.t("status.cancelled"),
+			value: "cancelled",
+		});
 		statusSelect.value = this.status;
 		statusSelect.addEventListener("change", () => {
 			this.status = statusSelect.value as KeyResult["status"];
 		});
 
 		const unitField = contentEl.createDiv("okr-field");
-		unitField.createEl("label", { cls: "okr-label", text: "进度单位" });
+		unitField.createEl("label", {
+			cls: "okr-label",
+			text: this.t("modals.fields.unit"),
+		});
 		const unitSelect = unitField.createEl("select", { cls: "okr-select" });
-		unitSelect.createEl("option", { text: "分数 (score)", value: "score" });
 		unitSelect.createEl("option", {
-			text: "百分比 (percentage)",
+			text: `${this.t("modals.select.score")} (score)`,
+			value: "score",
+		});
+		unitSelect.createEl("option", {
+			text: `${this.t("modals.select.percentage")} (percentage)`,
 			value: "percentage",
 		});
 		unitSelect.createEl("option", {
-			text: "数值 (number)",
+			text: `${this.t("modals.select.number")} (number)`,
 			value: "number",
 		});
 		unitSelect.createEl("option", {
-			text: "布尔 (boolean)",
+			text: `${this.t("modals.select.boolean")} (boolean)`,
 			value: "boolean",
 		});
 		unitSelect.value = this.unit;
@@ -112,7 +138,10 @@ export class EditKRModal extends Modal {
 		});
 
 		const currentField = contentEl.createDiv("okr-field");
-		currentField.createEl("label", { cls: "okr-label", text: "当前值" });
+		currentField.createEl("label", {
+			cls: "okr-label",
+			text: this.t("modals.fields.currentValue"),
+		});
 		const currentInput = currentField.createEl("input", {
 			cls: "okr-input",
 			type: "number",
@@ -122,7 +151,7 @@ export class EditKRModal extends Modal {
 		currentInput.value = String(this.current);
 		const currentError = currentField.createEl("div", {
 			cls: "okr-input-error",
-			text: "当前值必须是大于等于 0 的数字",
+			text: this.t("modals.input.currentError"),
 		});
 		currentInput.addEventListener("input", () => {
 			const value = Number(currentInput.value);
@@ -140,7 +169,7 @@ export class EditKRModal extends Modal {
 		});
 
 		const targetField = contentEl.createDiv("okr-field");
-		this.createRequiredLabel(targetField, "目标值");
+		this.createRequiredLabel(targetField, this.t("modals.fields.targetValue"));
 		const targetInput = targetField.createEl("input", {
 			cls: "okr-input",
 			type: "number",
@@ -150,7 +179,7 @@ export class EditKRModal extends Modal {
 		targetInput.value = String(this.target);
 		const targetError = targetField.createEl("div", {
 			cls: "okr-input-error",
-			text: "目标值必须是大于等于 0 的数字",
+			text: this.t("modals.input.targetError"),
 		});
 		targetInput.addEventListener("input", () => {
 			const value = Number(targetInput.value);
@@ -168,18 +197,30 @@ export class EditKRModal extends Modal {
 		});
 
 		const confField = contentEl.createDiv("okr-field");
-		confField.createEl("label", { cls: "okr-label", text: "信心度" });
+		confField.createEl("label", {
+			cls: "okr-label",
+			text: this.t("modals.fields.confidence"),
+		});
 		const confSelect = confField.createEl("select", { cls: "okr-select" });
-		confSelect.createEl("option", { text: "低", value: "low" });
-		confSelect.createEl("option", { text: "中", value: "medium" });
-		confSelect.createEl("option", { text: "高", value: "high" });
+		confSelect.createEl("option", {
+			text: this.t("modals.select.low"),
+			value: "low",
+		});
+		confSelect.createEl("option", {
+			text: this.t("modals.select.medium"),
+			value: "medium",
+		});
+		confSelect.createEl("option", {
+			text: this.t("modals.select.high"),
+			value: "high",
+		});
 		confSelect.value = this.confidence;
 		confSelect.addEventListener("change", () => {
 			this.confidence = confSelect.value as Confidence;
 		});
 
 		const dueField = contentEl.createDiv("okr-field");
-		this.createRequiredLabel(dueField, "截止日期");
+		this.createRequiredLabel(dueField, this.t("modals.fields.dueDate"));
 		const dueInput = dueField.createEl("input", {
 			cls: "okr-input",
 			type: "date",
@@ -191,7 +232,10 @@ export class EditKRModal extends Modal {
 		});
 
 		const descField = contentEl.createDiv("okr-field");
-		descField.createEl("label", { cls: "okr-label", text: "描述" });
+		descField.createEl("label", {
+			cls: "okr-label",
+			text: this.t("modals.fields.description"),
+		});
 		const descInput = descField.createEl("textarea", {
 			cls: "okr-textarea",
 		});
@@ -203,13 +247,13 @@ export class EditKRModal extends Modal {
 		const footer = contentEl.createDiv("okr-modal-footer");
 		const cancelBtn = footer.createEl("button", {
 			cls: "okr-btn-cancel",
-			text: "取消",
+			text: this.t("actions.cancel"),
 		});
 		cancelBtn.addEventListener("click", () => this.close());
 
 		const confirmBtn = footer.createEl("button", {
 			cls: "okr-btn-confirm",
-			text: "保存",
+			text: this.t("actions.save"),
 			attr: { type: "button" },
 		});
 		confirmBtn.addEventListener("click", () => {
@@ -258,14 +302,20 @@ export class EditKRModal extends Modal {
 					due: this.due,
 				},
 			);
-			new Notice(`已更新 Key Result：${updated.title}`);
+			new Notice(
+				this.t("modals.updateKeyResult.saved", {
+					title: updated.title,
+				}),
+			);
 			this.options.onComplete?.();
 			this.close();
 		} catch (error) {
 			new Notice(
 				error instanceof Error
-					? `更新 Key Result 失败：${error.message}`
-					: "更新 Key Result 失败",
+					? this.t("modals.updateKeyResult.saveFailedWithReason", {
+							message: error.message,
+						})
+					: this.t("modals.updateKeyResult.saveFailed"),
 			);
 		} finally {
 			this.isSubmitting = false;
@@ -277,5 +327,12 @@ export class EditKRModal extends Modal {
 		const label = container.createEl("label", { cls: "okr-label" });
 		label.appendText(text);
 		label.createEl("span", { cls: "okr-required", text: "*" });
+	}
+
+	private t(
+		key: string,
+		values?: Record<string, TranslationValue>,
+	): string {
+		return this.manager.getI18n().t(key, values);
 	}
 }

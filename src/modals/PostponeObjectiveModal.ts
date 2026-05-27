@@ -1,4 +1,5 @@
 import { App, Modal, Notice } from "obsidian";
+import { type TranslationValue } from "../i18n";
 import { OKRManager } from "../manager/OKRManager";
 import { Objective } from "../types";
 
@@ -29,17 +30,23 @@ export class PostponeObjectiveModal extends Modal {
 
 		contentEl.createEl("h2", {
 			cls: "okr-modal-title",
-			text: `延期 Objective ${this.objective.id}`,
+			text: this.t("modals.postpone.title", {
+				id: this.objective.id,
+			}),
 		});
 		contentEl.createEl("div", {
 			cls: "okr-modal-subtitle",
-			text: `当前截止日期：${this.objective.due || "未设置"}`,
+			text: this.objective.due
+				? this.t("modals.postpone.currentDueDate", {
+						due: this.objective.due,
+					})
+				: this.t("modals.postpone.currentDueDateUnset"),
 		});
 
 		const titleField = contentEl.createDiv("okr-field");
 		titleField.createEl("label", {
 			cls: "okr-label",
-			text: "目标",
+			text: this.t("modals.fields.objective"),
 		});
 		const titleInput = titleField.createEl("input", {
 			cls: "okr-input",
@@ -51,7 +58,7 @@ export class PostponeObjectiveModal extends Modal {
 		const dueField = contentEl.createDiv("okr-field");
 		dueField.createEl("label", {
 			cls: "okr-label",
-			text: "新的截止日期",
+			text: this.t("modals.fields.newDueDate"),
 		});
 		const dueInput = dueField.createEl("input", {
 			cls: "okr-input",
@@ -65,20 +72,20 @@ export class PostponeObjectiveModal extends Modal {
 
 		const hint = dueField.createEl("div", {
 			cls: "okr-input-hint",
-			text: "仅更新截止日期，其他目标字段保持不变。",
+			text: this.t("modals.postpone.hint"),
 		});
 		hint.setAttribute("role", "note");
 
 		const footer = contentEl.createDiv("okr-modal-footer");
 		const cancelBtn = footer.createEl("button", {
 			cls: "okr-btn-cancel",
-			text: "取消",
+			text: this.t("actions.cancel"),
 		});
 		cancelBtn.addEventListener("click", () => this.close());
 
 		const confirmBtn = footer.createEl("button", {
 			cls: "okr-btn-confirm",
-			text: "保存延期",
+			text: this.t("actions.savePostpone"),
 			attr: { type: "button" },
 		});
 		confirmBtn.addEventListener("click", () => {
@@ -124,18 +131,24 @@ export class PostponeObjectiveModal extends Modal {
 					due: this.due,
 				},
 			);
-			new Notice(`已更新截止日期：${updated.due}`);
+			new Notice(this.t("modals.postpone.saved", { due: updated.due }));
 			this.options.onComplete?.();
 			this.close();
 		} catch (error) {
 			new Notice(
 				error instanceof Error
-					? `更新截止日期失败：${error.message}`
-					: "更新截止日期失败",
+					? this.t("modals.postpone.saveFailedWithReason", {
+							message: error.message,
+						})
+					: this.t("modals.postpone.saveFailed"),
 			);
 		} finally {
 			this.isSubmitting = false;
 			this.validate();
 		}
+	}
+
+	private t(key: string, values?: Record<string, TranslationValue>): string {
+		return this.manager.getI18n().t(key, values);
 	}
 }
