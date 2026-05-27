@@ -10,8 +10,10 @@ import { ConfirmModal } from "../modals/ConfirmModal";
 import { EditKRModal } from "../modals/EditKRModal";
 import { EditObjectiveModal } from "../modals/EditObjectiveModal";
 import { NewKRModal } from "../modals/NewKRModal";
-import { KeyResult } from "../types";
+import { PostponeObjectiveModal } from "../modals/PostponeObjectiveModal";
+import { KeyResult, Objective } from "../types";
 import { DASHBOARD_VIEW_TYPE } from "./DashboardView";
+import { getObjectiveDeadlineState } from "../utils/objectiveStatus";
 import {
 	FRONTMATTER_OKR_ID,
 	FRONTMATTER_OKR_PERIOD,
@@ -46,12 +48,21 @@ export class OKRDetailRenderer {
 				const objective = (await manager.getObjectives(period)).find(
 					(item) => item.id === objId,
 				);
-				const krs = objective?.keyResults ?? [];
 				const section = this.renderObjectiveSection(
-					objective?.id ?? objId,
-					objective?.title ?? objId,
-					period,
-					krs,
+					objective ?? {
+						id: objId,
+						title: objId,
+						period,
+						periodType: manager.getParser().inferPeriodType(period),
+						description: "",
+						owner: "",
+						status: "active",
+						progress: 0,
+						created: "",
+						due: "",
+						filePath,
+						keyResults: [],
+					},
 				);
 				this.replaceCommentBlock(
 					el,
@@ -249,6 +260,34 @@ export class OKRDetailRenderer {
 			});
 
 			el.querySelectorAll<HTMLButtonElement>(
+				".okr-inline-postpone-objective-btn",
+			).forEach((button) => {
+				button.addEventListener("click", () => {
+					const objectiveId = button.dataset.objectiveId ?? "";
+					const period = button.dataset.period ?? "";
+					if (!objectiveId || !period) {
+						return;
+					}
+
+					void manager.getObjectives(period).then((objectives) => {
+						const objective = objectives.find(
+							(item) => item.id === objectiveId,
+						);
+						if (!objective) {
+							new Notice("找不到要延期的目标");
+							return;
+						}
+
+						new PostponeObjectiveModal(
+							manager.getApp(),
+							manager,
+							objective,
+						).open();
+					});
+				});
+			});
+
+			el.querySelectorAll<HTMLButtonElement>(
 				".okr-inline-open-dashboard-btn",
 			).forEach((button) => {
 				button.addEventListener("click", () => {
@@ -259,15 +298,18 @@ export class OKRDetailRenderer {
 	}
 
 	private static renderObjectiveSection(
-		objectiveId: string,
-		objectiveTitle: string,
-		period: string,
-		krs: KeyResult[],
+		objective: Objective,
 	): DocumentFragment {
 		const fragment = document.createDocumentFragment();
+		const deadlineState = getObjectiveDeadlineState(objective);
 		fragment.appendChild(
-			this.renderObjectiveActionBar(objectiveId, objectiveTitle, period),
+			this.renderObjectiveActionBar(objective, deadlineState),
 		);
+		if (deadlineState.tone !== "normal") {
+			fragment.appendChild(
+				this.renderObjectiveDeadlineBanner(objective, deadlineState),
+			);
+		}
 
 		const table = document.createElement("table");
 		table.className = "okr-inline-kr-table";
@@ -287,16 +329,20 @@ export class OKRDetailRenderer {
 		}
 
 		const tbody = table.createEl("tbody");
-		if (krs.length === 0) {
+		if (objective.keyResults.length === 0) {
 			const row = tbody.createEl("tr");
 			const cell = row.createEl("td", {
 				text: "当前目标暂无关键结果",
 			});
 			cell.setAttribute("colspan", "8");
 		} else {
-			krs.forEach((kr, index) => {
+			objective.keyResults.forEach((kr, index) => {
 				tbody.appendChild(
-					this.renderKRTableRow(kr, index + 1, krs.length),
+					this.renderKRTableRow(
+						kr,
+						index + 1,
+						objective.keyResults.length,
+					),
 				);
 			});
 		}
@@ -383,12 +429,23 @@ export class OKRDetailRenderer {
 	}
 
 	private static renderObjectiveActionBar(
-		objectiveId: string,
-		objectiveTitle: string,
-		period: string,
+		objective: Objective,
+		deadlineState: ReturnType<typeof getObjectiveDeadlineState>,
 	): HTMLDivElement {
 		const bar = document.createElement("div");
 		bar.className = "okr-inline-action-bar";
+		const summary = document.createElement("div");
+		summary.className = "okr-inline-objective-meta";
+		summary.createEl("span", {
+			text: deadlineState.helpText ?? deadlineState.label,
+		});
+		if (deadlineState.tone !== "normal") {
+			summary.createEl("span", {
+				cls: `okr-badge okr-deadline-badge okr-deadline-${deadlineState.tone}`,
+				text: deadlineState.label,
+			});
+		}
+		bar.appendChild(summary);
 		bar.appendChild(
 			this.createActionButton(
 				"打开仪表盘",
@@ -400,18 +457,30 @@ export class OKRDetailRenderer {
 				"新增关键结果",
 				"okr-inline-action-btn okr-inline-add-kr-btn",
 				{
-					objectiveId,
-					period,
+					objectiveId: objective.id,
+					period: objective.period,
 				},
 			),
 		);
+		if (deadlineState.showPostponeAction) {
+			bar.appendChild(
+				this.createActionButton(
+					"延期",
+					"okr-inline-action-btn okr-inline-postpone-objective-btn",
+					{
+						objectiveId: objective.id,
+						period: objective.period,
+					},
+				),
+			);
+		}
 		bar.appendChild(
 			this.createActionButton(
 				"编辑目标",
 				"okr-inline-action-btn okr-inline-edit-objective-btn",
 				{
-					objectiveId,
-					period,
+					objectiveId: objective.id,
+					period: objective.period,
 				},
 			),
 		);
@@ -420,13 +489,30 @@ export class OKRDetailRenderer {
 				"删除目标",
 				"okr-inline-action-btn okr-inline-action-danger okr-inline-delete-objective-btn",
 				{
-					objectiveId,
-					objectiveTitle,
-					period,
+					objectiveId: objective.id,
+					objectiveTitle: objective.title,
+					period: objective.period,
 				},
 			),
 		);
 		return bar;
+	}
+
+	private static renderObjectiveDeadlineBanner(
+		objective: Objective,
+		deadlineState: ReturnType<typeof getObjectiveDeadlineState>,
+	): HTMLDivElement {
+		const banner = document.createElement("div");
+		banner.className = `okr-inline-objective-alert okr-inline-objective-alert-${deadlineState.tone}`;
+		banner.createEl("strong", {
+			text: `${objective.id} ${deadlineState.label}`,
+		});
+		banner.createEl("span", {
+			text:
+				deadlineState.helpText ??
+				`目标「${objective.title}」需要更新截止日期。`,
+		});
+		return banner;
 	}
 
 	private static replaceCommentBlock(

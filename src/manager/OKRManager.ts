@@ -23,7 +23,12 @@ import {
 	OKR_TYPE_OBJECTIVE,
 	PERIOD_PATTERN,
 } from "../constants";
-import { compareKeyResultIds, compareObjectiveIds } from "../utils/sort";
+import {
+	compareKeyResultIds,
+	compareObjectiveIds,
+	normalizeKeyResultOrders,
+	reorderKeyResultOrders,
+} from "../utils/sort";
 
 interface PeriodCacheEntry {
 	objectives: Objective[];
@@ -475,14 +480,38 @@ export class OKRManager {
 			return;
 		}
 
-		[sorted[currentIndex], sorted[targetIndex]] = [
-			sorted[targetIndex]!,
-			sorted[currentIndex]!,
-		];
-		const reordered = sorted.map((item, index) => ({
-			...item,
-			order: index,
-		}));
+		await this.reorderKeyResult(krId, period, targetIndex);
+	}
+
+	async reorderKeyResult(
+		krId: string,
+		period: string,
+		targetIndex: number,
+	): Promise<void> {
+		const found = await this.findObjectiveEntryByKRId(
+			krId,
+			this.normalizePeriod(period),
+		);
+		if (!found) {
+			throw new Error(`找不到关键结果：${krId}`);
+		}
+
+		const sorted = normalizeKeyResultOrders(found.objective.keyResults);
+		const currentIndex = sorted.findIndex((item) => item.id === krId);
+		if (currentIndex === -1) {
+			throw new Error(`找不到关键结果：${krId}`);
+		}
+
+		const clampedIndex = Math.max(0, Math.min(targetIndex, sorted.length - 1));
+		if (clampedIndex === currentIndex) {
+			return;
+		}
+
+		const reordered = reorderKeyResultOrders(
+			sorted,
+			currentIndex,
+			clampedIndex,
+		);
 
 		const updatedObjective: Objective = {
 			...found.objective,
@@ -647,25 +676,24 @@ export class OKRManager {
 	}
 
 	private normalizeObjective(objective: Objective): Objective {
-		const normalizedKeyResults = [...objective.keyResults]
-			.sort((left, right) => left.order - right.order)
-			.map((keyResult, index) => {
-				const progress = this.settings.autoComputeProgress
-					? this.parser.calculateKRProgress(
-							keyResult.current,
-							keyResult.target,
-							keyResult.unit,
-						)
-					: this.parser.clampProgress(keyResult.progress);
-				return {
-					...keyResult,
-					order: index,
-					progress,
-					checkIns: [...keyResult.checkIns].sort((left, right) =>
-						right.recordedAt.localeCompare(left.recordedAt),
-					),
-				};
-			});
+		const normalizedKeyResults = normalizeKeyResultOrders(
+			objective.keyResults,
+		).map((keyResult) => {
+			const progress = this.settings.autoComputeProgress
+				? this.parser.calculateKRProgress(
+						keyResult.current,
+						keyResult.target,
+						keyResult.unit,
+					)
+				: this.parser.clampProgress(keyResult.progress);
+			return {
+				...keyResult,
+				progress,
+				checkIns: [...keyResult.checkIns].sort((left, right) =>
+					right.recordedAt.localeCompare(left.recordedAt),
+				),
+			};
+		});
 
 		return {
 			...objective,

@@ -13,7 +13,10 @@ import { EditKRModal } from "../modals/EditKRModal";
 import { EditObjectiveModal } from "../modals/EditObjectiveModal";
 import { NewKRModal } from "../modals/NewKRModal";
 import { NewObjectiveModal } from "../modals/NewObjectiveModal";
+import { PostponeObjectiveModal } from "../modals/PostponeObjectiveModal";
 import { KeyResult, Objective } from "../types";
+import { getObjectiveDeadlineState } from "../utils/objectiveStatus";
+import { reorderKeyResultOrders } from "../utils/sort";
 
 export const DASHBOARD_VIEW_TYPE = "okr-dashboard";
 
@@ -23,6 +26,10 @@ export class DashboardView extends ItemView {
 	private krsMap: Map<string, KeyResult[]> = new Map();
 	private renderDebounceTimer: number | null = null;
 	private collapsedObjs = new Set<string>();
+	private draggingKR: {
+		objectiveId: string;
+		krId: string;
+	} | null = null;
 
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -84,6 +91,7 @@ export class DashboardView extends ItemView {
 			await this.refreshData();
 			this.renderToolbar(container, periods);
 			this.renderSummaryBar(container);
+			this.renderOverdueReminder(container);
 			this.renderList(container);
 			this.renderFooter(container);
 		} catch (error) {
@@ -201,6 +209,10 @@ export class DashboardView extends ItemView {
 
 	private renderObjectiveCard(container: HTMLElement, obj: Objective): void {
 		const card = container.createDiv("okr-obj-card");
+		const deadlineState = getObjectiveDeadlineState(obj);
+		if (deadlineState.tone === "overdue") {
+			card.addClass("is-overdue");
+		}
 		card.setAttribute("data-obj-id", obj.id);
 
 		const header = card.createDiv("okr-obj-header");
@@ -266,6 +278,7 @@ export class DashboardView extends ItemView {
 			"okr-obj-progress-track",
 			"okr-obj-progress-fill",
 		);
+		this.renderObjectiveDeadlineMeta(card, obj, deadlineState);
 
 		const krList = card.createDiv("okr-kr-list");
 		if (isCollapsed) {
@@ -274,7 +287,7 @@ export class DashboardView extends ItemView {
 
 		const keyResults = this.krsMap.get(obj.id) ?? [];
 		keyResults.forEach((keyResult, index) => {
-			this.renderKRRow(krList, keyResult, index, keyResults.length);
+			this.renderKRRow(krList, obj, keyResult, index);
 		});
 
 		const addKrRow = krList.createDiv("okr-add-kr-row");
@@ -293,12 +306,13 @@ export class DashboardView extends ItemView {
 
 	private renderKRRow(
 		container: HTMLElement,
+		objective: Objective,
 		kr: KeyResult,
 		index: number,
-		total: number,
 	): void {
 		const row = container.createDiv("okr-kr-row");
 		row.setAttribute("data-kr-id", kr.id);
+		row.draggable = true;
 		row.addEventListener("click", () => {
 			void this.openFile(
 				kr.filePath,
@@ -307,6 +321,9 @@ export class DashboardView extends ItemView {
 		});
 
 		const left = row.createDiv("okr-kr-row-left");
+		const dragHandle = left.createDiv("okr-kr-drag-handle");
+		dragHandle.setAttribute("aria-hidden", "true");
+		setIcon(dragHandle, "grip-vertical");
 		left.createEl("span", {
 			cls: `okr-kr-dot okr-conf-${kr.confidence}`,
 			text: "●",
@@ -363,48 +380,6 @@ export class DashboardView extends ItemView {
 			}).open();
 		});
 
-		const moveUpButton = right.createEl("button", {
-			cls: "okr-row-action-btn",
-			text: "上移",
-		});
-		moveUpButton.setAttribute("aria-label", "上移关键结果");
-		moveUpButton.disabled = index === 0;
-		moveUpButton.addEventListener("click", (event) => {
-			event.stopPropagation();
-			void this.manager
-				.moveKeyResult(kr.id, kr.period, "up")
-				.then(() => {
-					new Notice("已上移关键结果");
-					this.scheduleRender();
-				})
-				.catch((error: unknown) => {
-					const message =
-						error instanceof Error ? error.message : "未知错误";
-					new Notice(`上移关键结果失败：${message}`);
-				});
-		});
-
-		const moveDownButton = right.createEl("button", {
-			cls: "okr-row-action-btn",
-			text: "下移",
-		});
-		moveDownButton.setAttribute("aria-label", "下移关键结果");
-		moveDownButton.disabled = index === total - 1;
-		moveDownButton.addEventListener("click", (event) => {
-			event.stopPropagation();
-			void this.manager
-				.moveKeyResult(kr.id, kr.period, "down")
-				.then(() => {
-					new Notice("已下移关键结果");
-					this.scheduleRender();
-				})
-				.catch((error: unknown) => {
-					const message =
-						error instanceof Error ? error.message : "未知错误";
-					new Notice(`下移关键结果失败：${message}`);
-				});
-		});
-
 		const deleteButton = right.createEl("button", {
 			cls: "okr-row-action-btn okr-row-action-danger",
 			text: "删除",
@@ -424,6 +399,158 @@ export class DashboardView extends ItemView {
 				},
 			}).open();
 		});
+
+		this.bindKRDragEvents(row, container, objective, kr, index);
+	}
+
+	private bindKRDragEvents(
+		row: HTMLElement,
+		container: HTMLElement,
+		objective: Objective,
+		kr: KeyResult,
+		index: number,
+	): void {
+		row.addEventListener("dragstart", (event) => {
+			this.draggingKR = {
+				objectiveId: objective.id,
+				krId: kr.id,
+			};
+			row.addClass("is-dragging");
+			event.dataTransfer?.setData("text/plain", kr.id);
+			if (event.dataTransfer) {
+				event.dataTransfer.effectAllowed = "move";
+			}
+		});
+
+		row.addEventListener("dragover", (event) => {
+			if (
+				!this.draggingKR ||
+				this.draggingKR.objectiveId !== objective.id ||
+				this.draggingKR.krId === kr.id
+			) {
+				return;
+			}
+
+			event.preventDefault();
+			this.clearDragIndicators();
+			row.addClass(
+				this.shouldInsertAfter(row, event)
+					? "is-drop-after"
+					: "is-drop-before",
+			);
+		});
+
+		row.addEventListener("drop", (event) => {
+			if (
+				!this.draggingKR ||
+				this.draggingKR.objectiveId !== objective.id ||
+				this.draggingKR.krId === kr.id
+			) {
+				return;
+			}
+
+			event.preventDefault();
+			const currentKeyResults = this.krsMap.get(objective.id) ?? [];
+			const sourceIndex = currentKeyResults.findIndex(
+				(item) => item.id === this.draggingKR?.krId,
+			);
+			if (sourceIndex === -1) {
+				this.cleanupDragState();
+				return;
+			}
+
+			const rawTargetIndex =
+				index + (this.shouldInsertAfter(row, event) ? 1 : 0);
+			const targetIndex =
+				sourceIndex < rawTargetIndex
+					? rawTargetIndex - 1
+					: rawTargetIndex;
+			if (targetIndex === sourceIndex) {
+				this.cleanupDragState();
+				return;
+			}
+
+			const previous = [...currentKeyResults];
+			const reordered = reorderKeyResultOrders(
+				currentKeyResults,
+				sourceIndex,
+				targetIndex,
+			);
+			const draggedKrId = this.draggingKR.krId;
+			this.krsMap.set(objective.id, reordered);
+			this.moveKRRowInDom(
+				container,
+				draggedKrId,
+				kr.id,
+				this.shouldInsertAfter(row, event),
+			);
+			this.cleanupDragState();
+			void this.manager
+				.reorderKeyResult(draggedKrId, objective.period, targetIndex)
+				.then(() => {
+					new Notice("已更新关键结果顺序");
+					this.scheduleRender();
+				})
+				.catch((error: unknown) => {
+					this.krsMap.set(objective.id, previous);
+					const message =
+						error instanceof Error ? error.message : "未知错误";
+					new Notice(`更新关键结果顺序失败：${message}`);
+					this.scheduleRender();
+				});
+		});
+
+		row.addEventListener("dragend", () => {
+			this.cleanupDragState();
+		});
+	}
+
+	private shouldInsertAfter(row: HTMLElement, event: DragEvent): boolean {
+		const rect = row.getBoundingClientRect();
+		return event.clientY >= rect.top + rect.height / 2;
+	}
+
+	private clearDragIndicators(): void {
+		this.containerEl
+			.querySelectorAll<HTMLElement>(
+				".okr-kr-row.is-dragging, .okr-kr-row.is-drop-before, .okr-kr-row.is-drop-after",
+			)
+			.forEach((element) => {
+				element.removeClass(
+					"is-dragging",
+					"is-drop-before",
+					"is-drop-after",
+				);
+			});
+	}
+
+	private cleanupDragState(): void {
+		this.draggingKR = null;
+		this.clearDragIndicators();
+	}
+
+	private moveKRRowInDom(
+		container: HTMLElement,
+		draggedKrId: string,
+		targetKrId: string,
+		insertAfter: boolean,
+	): void {
+		const draggedRow = container.querySelector<HTMLElement>(
+			`[data-kr-id="${draggedKrId}"]`,
+		);
+		const targetRow = container.querySelector<HTMLElement>(
+			`[data-kr-id="${targetKrId}"]`,
+		);
+		if (!draggedRow || !targetRow || draggedRow === targetRow) {
+			return;
+		}
+
+		if (insertAfter) {
+			container.insertBefore(draggedRow, targetRow.nextSibling);
+			return;
+		}
+
+		container.insertBefore(draggedRow, targetRow);
 	}
 
 	private renderProgressBar(
@@ -484,6 +611,58 @@ export class DashboardView extends ItemView {
 		).open();
 	}
 
+	private renderOverdueReminder(container: HTMLElement): void {
+		const overdueObjectives = this.objectives.filter(
+			(objective) =>
+				getObjectiveDeadlineState(objective).tone === "overdue",
+		);
+		if (overdueObjectives.length === 0) {
+			return;
+		}
+
+		const reminder = container.createDiv(
+			"okr-deadline-reminder okr-deadline-reminder-overdue",
+		);
+		const titles = overdueObjectives
+			.slice(0, 3)
+			.map((objective) => objective.id)
+			.join("、");
+		const suffix = overdueObjectives.length > 3 ? " 等" : "";
+		reminder.createEl("span", {
+			text: `当前可见目标中有 ${overdueObjectives.length} 个已超期${
+				titles ? `：${titles}` : ""
+			}${suffix}，可直接点击“延期”更新截止日期。`,
+		});
+	}
+
+	private renderObjectiveDeadlineMeta(
+		container: HTMLElement,
+		objective: Objective,
+		deadlineState: ReturnType<typeof getObjectiveDeadlineState>,
+	): void {
+		const meta = container.createDiv("okr-obj-meta");
+		meta.createEl("span", {
+			cls: "okr-obj-deadline-text",
+			text: deadlineState.helpText ?? deadlineState.label,
+		});
+		if (deadlineState.tone !== "normal") {
+			meta.createEl("span", {
+				cls: `okr-badge okr-deadline-badge okr-deadline-${deadlineState.tone}`,
+				text: deadlineState.label,
+			});
+		}
+		if (deadlineState.showPostponeAction) {
+			const postponeButton = meta.createEl("button", {
+				cls: "okr-row-action-btn okr-row-action-quiet",
+				text: "延期",
+			});
+			postponeButton.addEventListener("click", (event) => {
+				event.stopPropagation();
+				this.openPostponeObjectiveModal(objective);
+			});
+		}
+	}
+
 	private openObjectiveMenu(event: MouseEvent, objective: Objective): void {
 		const menu = new Menu();
 		menu.addItem((item) =>
@@ -494,6 +673,13 @@ export class DashboardView extends ItemView {
 				);
 			}),
 		);
+		if (getObjectiveDeadlineState(objective).showPostponeAction) {
+			menu.addItem((item) =>
+				item.setTitle("延期截止日期").onClick(() => {
+					this.openPostponeObjectiveModal(objective);
+				}),
+			);
+		}
 		menu.addItem((item) =>
 			item.setTitle("编辑目标").onClick(() => {
 				new EditObjectiveModal(this.app, this.manager, objective, {
@@ -539,5 +725,11 @@ export class DashboardView extends ItemView {
 
 	refresh(): void {
 		this.scheduleRender();
+	}
+
+	private openPostponeObjectiveModal(objective: Objective): void {
+		new PostponeObjectiveModal(this.app, this.manager, objective, {
+			onComplete: () => this.scheduleRender(),
+		}).open();
 	}
 }

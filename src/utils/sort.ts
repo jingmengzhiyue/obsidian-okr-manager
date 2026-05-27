@@ -3,6 +3,11 @@ function extractNumericSuffix(value: string, prefix: string): number {
 	return match ? Number.parseInt(match[1] ?? "0", 10) : Number.NaN;
 }
 
+interface OrderedKeyResultLike {
+	id: string;
+	order: number;
+}
+
 function extractKeyResultParts(value: string): [number, number] {
 	const match = value.match(/^O(\d+)-KR(\d+)$/);
 	if (!match) {
@@ -38,4 +43,47 @@ export function compareKeyResultIds(left: string, right: string): number {
 	}
 
 	return left.localeCompare(right);
+}
+
+export function compareKeyResultsByOrder(
+	left: OrderedKeyResultLike,
+	right: OrderedKeyResultLike,
+): number {
+	return left.order - right.order || compareKeyResultIds(left.id, right.id);
+}
+
+export function normalizeKeyResultOrders<T extends OrderedKeyResultLike>(
+	items: T[],
+): T[] {
+	return [...items].sort(compareKeyResultsByOrder).map((item, index) => ({
+		...item,
+		order: index,
+	}));
+}
+
+export function reorderKeyResultOrders<T extends OrderedKeyResultLike>(
+	items: T[],
+	fromIndex: number,
+	toIndex: number,
+): T[] {
+	const normalized = normalizeKeyResultOrders(items);
+	if (
+		fromIndex < 0 ||
+		fromIndex >= normalized.length ||
+		normalized.length <= 1
+	) {
+		return normalized;
+	}
+
+	const [moved] = normalized.splice(fromIndex, 1);
+	if (!moved) {
+		return normalized;
+	}
+
+	const clampedIndex = Math.max(0, Math.min(toIndex, normalized.length));
+	normalized.splice(clampedIndex, 0, moved);
+	return normalized.map((item, index) => ({
+		...item,
+		order: index,
+	}));
 }

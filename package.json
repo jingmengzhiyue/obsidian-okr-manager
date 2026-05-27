@@ -1,12 +1,13 @@
 {
 	"name": "okr-manager",
-	"version": "0.1.2",
+	"version": "0.1.3",
 	"description": "Manage OKRs inside your vault with a streamlined dashboard and built-in check-ins.",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"test": "node --import jiti/register --test tests/okr-utils.test.mjs",
 		"version": "node version-bump.mjs && git add manifest.json versions.json",
 		"lint": "eslint ."
 	},
