@@ -5,6 +5,20 @@ const sortModule = await import("../src/utils/sort.ts");
 const objectiveStatusModule = await import("../src/utils/objectiveStatus.ts");
 const i18nModule = await import("../src/i18n/index.ts");
 const typesModule = await import("../src/types.ts");
+let fileTreeModule;
+let previewRefreshModule;
+
+try {
+	fileTreeModule = await import("../src/utils/fileTree.ts");
+} catch {
+	fileTreeModule = {};
+}
+
+try {
+	previewRefreshModule = await import("../src/utils/previewRefresh.ts");
+} catch {
+	previewRefreshModule = {};
+}
 
 const { normalizeKeyResultOrders, reorderKeyResultOrders } =
 	sortModule.default ?? sortModule;
@@ -12,6 +26,10 @@ const { getObjectiveDeadlineState } =
 	objectiveStatusModule.default ?? objectiveStatusModule;
 const { createI18n, resolveLocale } = i18nModule.default ?? i18nModule;
 const { DEFAULT_SETTINGS } = typesModule.default ?? typesModule;
+const { collectMarkdownFilesFromTree } =
+	fileTreeModule.default ?? fileTreeModule;
+const { shouldRefreshActivePreview } =
+	previewRefreshModule.default ?? previewRefreshModule;
 
 test("normalizeKeyResultOrders falls back to KR id when order values collide", () => {
 	const items = [
@@ -112,6 +130,46 @@ test("resolveLocale supports en and zh-CN and falls back to en", () => {
 
 test("DEFAULT_SETTINGS no longer contains the legacy checkInsDir field", () => {
 	assert.equal("checkInsDir" in DEFAULT_SETTINGS, false);
+});
+
+test("collectMarkdownFilesFromTree only returns markdown files in the requested subtree", () => {
+	assert.equal(typeof collectMarkdownFilesFromTree, "function");
+
+	const files = collectMarkdownFilesFromTree({
+		children: [
+			{ path: "OKR/2026-Q2/O1.md", extension: "md" },
+			{ path: "OKR/2026-Q2/notes.txt", extension: "txt" },
+			{
+				path: "OKR/2026-Q2/archive",
+				children: [
+					{ path: "OKR/2026-Q2/archive/O2.md", extension: "md" },
+					{ path: "OKR/2026-Q2/archive/README.md", extension: "md" },
+				],
+			},
+		],
+	});
+
+	assert.deepEqual(
+		files.map((file) => file.path),
+		[
+			"OKR/2026-Q2/O1.md",
+			"OKR/2026-Q2/archive/O2.md",
+			"OKR/2026-Q2/archive/README.md",
+		],
+	);
+});
+
+test("shouldRefreshActivePreview only refreshes when active file matches the source path", () => {
+	assert.equal(typeof shouldRefreshActivePreview, "function");
+	assert.equal(
+		shouldRefreshActivePreview("OKR/2026-Q2/O1.md", "OKR/2026-Q2/O1.md"),
+		true,
+	);
+	assert.equal(
+		shouldRefreshActivePreview("OKR/2026-Q2/O1.md", "OKR/2026-Q2/O2.md"),
+		false,
+	);
+	assert.equal(shouldRefreshActivePreview(null, "OKR/2026-Q2/O1.md"), false);
 });
 
 test("getObjectiveDeadlineState returns English labels when locale is en", () => {

@@ -67,26 +67,17 @@ export default class OKRPlugin extends Plugin {
 		this.addCommand({
 			id: "okr-new-objective",
 			name: this.i18n.t("actions.newObjective"),
-			callback: () =>
-				new NewObjectiveModal(this.app, this.manager, () =>
-					this.refreshDashboard(),
-				).open(),
+			callback: () => new NewObjectiveModal(this.app, this.manager).open(),
 		});
 		this.addCommand({
 			id: "okr-new-kr",
 			name: this.i18n.t("actions.newKeyResult"),
-			callback: () =>
-				new NewKRModal(this.app, this.manager, {
-					onComplete: () => this.refreshDashboard(),
-				}).open(),
+			callback: () => new NewKRModal(this.app, this.manager).open(),
 		});
 		this.addCommand({
 			id: "okr-check-in",
 			name: this.i18n.t("actions.recordCheckIn"),
-			callback: () =>
-				new CheckInModal(this.app, this.manager, {
-					onComplete: () => this.refreshDashboard(),
-				}).open(),
+			callback: () => new CheckInModal(this.app, this.manager).open(),
 		});
 		this.addCommand({
 			id: "okr-open-dashboard",

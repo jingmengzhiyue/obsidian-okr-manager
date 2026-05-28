@@ -6,7 +6,7 @@ Plan, track, and review Objectives and Key Results directly inside your Obsidian
 
 ![Obsidian](https://img.shields.io/badge/Obsidian-%3E%3D1.4.4-blueviolet)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Version](https://img.shields.io/badge/version-0.1.5-blue)
+![Version](https://img.shields.io/badge/version-1.0.0-blue)
 
 [中文文档](./README.zh-CN.md) · [Features](#features) · [Installation](#installation) · [Quick Start](#quick-start) · [Usage](#usage) · [FAQ](#faq)
 
@@ -314,9 +314,9 @@ The following backlog is based on a review of the current implementation, with p
 
 ### P0: Reliability and responsiveness
 
-- [ ] Refresh the current Markdown preview immediately after inline actions such as check-in, edit, delete, add key result, and postpone due date
-- [ ] Reduce duplicate dashboard refreshes triggered by both modal callbacks and vault metadata events
-- [ ] Replace full-vault objective discovery with directory-scoped lookup under the configured OKR root
+- [x] Refresh the current Markdown preview immediately after inline actions such as check-in, edit, delete, add key result, and postpone due date
+- [x] Reduce duplicate dashboard refreshes triggered by both modal callbacks and vault metadata events
+- [x] Replace full-vault objective discovery with directory-scoped lookup under the configured OKR root
 - [ ] Add a fast key-result-to-objective index to avoid cross-period scans during progress recording and lookup
 
 ### P1: Core OKR workflow completeness

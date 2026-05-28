@@ -30,6 +30,7 @@ import {
 	normalizeKeyResultOrders,
 	reorderKeyResultOrders,
 } from "../utils/sort";
+import { collectMarkdownFilesFromTree } from "../utils/fileTree";
 
 interface PeriodCacheEntry {
 	objectives: Objective[];
@@ -808,11 +809,14 @@ export class OKRManager {
 	}
 
 	private getObjectiveFiles(period: string): TFile[] {
-		const prefix = `${this.getPeriodDir(period)}/`;
-		return this.app.vault
-			.getFiles()
-			.filter((file) => normalizePath(file.path).startsWith(prefix))
-			.filter((file) => file.extension === "md");
+		const periodFolder = this.app.vault.getAbstractFileByPath(
+			this.getPeriodDir(period),
+		);
+		if (!(periodFolder instanceof TFolder)) {
+			return [];
+		}
+
+		return collectMarkdownFilesFromTree(periodFolder) as TFile[];
 	}
 
 	private getValidCache(period: string): PeriodCacheEntry | null {

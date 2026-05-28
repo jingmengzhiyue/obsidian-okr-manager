@@ -23,6 +23,7 @@ import {
 	OKR_KR_LIST_START,
 	OKR_TYPE_OBJECTIVE,
 } from "../constants";
+import { shouldRefreshActivePreview } from "../utils/previewRefresh";
 
 export class OKRDetailRenderer {
 	static postProcessor(
@@ -73,6 +74,10 @@ export class OKRDetailRenderer {
 					section,
 				);
 			}
+
+			const rerenderCurrentPreview = (): void => {
+				void this.refreshPreview(manager, ctx.sourcePath);
+			};
 
 			el.querySelectorAll<HTMLButtonElement>(
 				".okr-inline-move-up-btn",
@@ -155,6 +160,7 @@ export class OKRDetailRenderer {
 
 					new CheckInModal(manager.getApp(), manager, {
 						prefillKrId: krId,
+						onComplete: rerenderCurrentPreview,
 					}).open();
 				});
 			});
@@ -184,6 +190,7 @@ export class OKRDetailRenderer {
 							manager.getApp(),
 							manager,
 							keyResult,
+							{ onComplete: rerenderCurrentPreview },
 						).open();
 					});
 				});
@@ -215,6 +222,7 @@ export class OKRDetailRenderer {
 							}),
 						onConfirm: async () => {
 							await manager.deleteKeyResult(krId, period);
+							await this.refreshPreview(manager, ctx.sourcePath);
 							new Notice(
 								manager
 									.getI18n()
@@ -254,6 +262,7 @@ export class OKRDetailRenderer {
 							manager.getApp(),
 							manager,
 							objective,
+							{ onComplete: rerenderCurrentPreview },
 						).open();
 					});
 				});
@@ -290,6 +299,7 @@ export class OKRDetailRenderer {
 								period,
 								true,
 							);
+							await this.refreshPreview(manager, ctx.sourcePath);
 							new Notice(
 								manager
 									.getI18n()
@@ -311,6 +321,7 @@ export class OKRDetailRenderer {
 					new NewKRModal(manager.getApp(), manager, {
 						initialPeriod: period,
 						initialObjectiveId: objectiveId,
+						onComplete: rerenderCurrentPreview,
 					}).open();
 				});
 			});
@@ -342,6 +353,7 @@ export class OKRDetailRenderer {
 							manager.getApp(),
 							manager,
 							objective,
+							{ onComplete: rerenderCurrentPreview },
 						).open();
 					});
 				});
@@ -683,8 +695,10 @@ export class OKRDetailRenderer {
 		const view = manager
 			.getApp()
 			.workspace.getActiveViewOfType(MarkdownView);
-		if (view?.file?.path === normalizePath(sourcePath)) {
-			view.previewMode.rerender(true);
+		if (
+			shouldRefreshActivePreview(view?.file?.path ?? null, sourcePath)
+		) {
+			view?.previewMode.rerender(true);
 		}
 	}
 }

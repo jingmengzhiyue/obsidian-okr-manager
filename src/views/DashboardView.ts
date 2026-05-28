@@ -321,7 +321,6 @@ export class DashboardView extends ItemView {
 			new NewKRModal(this.app, this.manager, {
 				initialPeriod: this.currentPeriod,
 				initialObjectiveId: obj.id,
-				onComplete: () => this.scheduleRender(),
 			}).open();
 		});
 	}
@@ -389,7 +388,6 @@ export class DashboardView extends ItemView {
 			event.stopPropagation();
 			new CheckInModal(this.app, this.manager, {
 				prefillKrId: kr.id,
-				onComplete: () => this.scheduleRender(),
 			}).open();
 		});
 
@@ -400,9 +398,7 @@ export class DashboardView extends ItemView {
 		editButton.setAttribute("aria-label", this.t("actions.editKeyResult"));
 		editButton.addEventListener("click", (event) => {
 			event.stopPropagation();
-			new EditKRModal(this.app, this.manager, kr, {
-				onComplete: () => this.scheduleRender(),
-			}).open();
+			new EditKRModal(this.app, this.manager, kr).open();
 		});
 
 		const deleteButton = right.createEl("button", {
@@ -643,9 +639,7 @@ export class DashboardView extends ItemView {
 	}
 
 	private openNewObjectiveModal(): void {
-		new NewObjectiveModal(this.app, this.manager, () =>
-			this.scheduleRender(),
-		).open();
+		new NewObjectiveModal(this.app, this.manager).open();
 	}
 
 	private renderOverdueReminder(container: HTMLElement): void {
@@ -737,9 +731,7 @@ export class DashboardView extends ItemView {
 		}
 		menu.addItem((item) =>
 			item.setTitle(this.t("actions.editObjective")).onClick(() => {
-				new EditObjectiveModal(this.app, this.manager, objective, {
-					onComplete: () => this.scheduleRender(),
-				}).open();
+				new EditObjectiveModal(this.app, this.manager, objective).open();
 			}),
 		);
 		menu.addItem((item) =>
@@ -791,9 +783,7 @@ export class DashboardView extends ItemView {
 	}
 
 	private openPostponeObjectiveModal(objective: Objective): void {
-		new PostponeObjectiveModal(this.app, this.manager, objective, {
-			onComplete: () => this.scheduleRender(),
-		}).open();
+		new PostponeObjectiveModal(this.app, this.manager, objective).open();
 	}
 
 	private t(key: string, values?: Record<string, string | number>): string {
