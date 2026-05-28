@@ -14,7 +14,7 @@ Plan, track, and review Objectives and Key Results directly inside your Obsidian
 
 ---
 
-![snapshot](assets\OKR.gif)
+![snapshot](assets/OKR.gif)
 
 ## Overview
 

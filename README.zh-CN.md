@@ -14,7 +14,7 @@
 
 ---
 
-![snapshot](assets\OKR.gif)
+![snapshot](assets/OKR.gif)
 
 ## 简介
 
