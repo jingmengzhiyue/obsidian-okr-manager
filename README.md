@@ -308,6 +308,31 @@ Yes. The plugin supports week, month, quarter, and year period types.
 
 Yes. The plugin is not desktop-only.
 
+## Roadmap
+
+The following backlog is based on a review of the current implementation, with priorities ordered by reliability, performance, and product completeness.
+
+### P0: Reliability and responsiveness
+
+- [ ] Refresh the current Markdown preview immediately after inline actions such as check-in, edit, delete, add key result, and postpone due date
+- [ ] Reduce duplicate dashboard refreshes triggered by both modal callbacks and vault metadata events
+- [ ] Replace full-vault objective discovery with directory-scoped lookup under the configured OKR root
+- [ ] Add a fast key-result-to-objective index to avoid cross-period scans during progress recording and lookup
+
+### P1: Core OKR workflow completeness
+
+- [ ] Add cycle planning tools such as templates, carry-forward of unfinished items, and archive/close-cycle actions
+- [ ] Add structured review workflows for weekly check-ins, mid-cycle reviews, and end-of-cycle retrospectives
+- [ ] Add dashboard filters and search for owner, status, period, and overdue state
+- [ ] Enrich check-ins with next steps, risk level, milestone notes, and evidence links
+
+### P2: Management depth and reporting
+
+- [ ] Support weighted key results or more advanced health scoring beyond simple averaging
+- [ ] Add progress trend views and summary reports for a period
+- [ ] Add export options for Markdown or CSV summaries
+- [ ] Improve multi-owner and team-oriented management beyond single free-text owner fields
+
 ## Development
 
 ```bash
