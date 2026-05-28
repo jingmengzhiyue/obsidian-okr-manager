@@ -6,7 +6,7 @@
 
 ![Obsidian](https://img.shields.io/badge/Obsidian-%3E%3D1.4.4-blueviolet)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Version](https://img.shields.io/badge/version-0.1.5-blue)
+![Version](https://img.shields.io/badge/version-1.0.0-blue)
 
 [English README](./README.md) · [功能特性](#功能特性) · [安装方法](#安装方法) · [快速开始](#快速开始) · [使用说明](#使用说明) · [常见问题](#常见问题)
 
@@ -314,9 +314,9 @@ Dashboard 会显示超期提醒和状态标识，你也可以直接从界面里�
 
 ### P0：稳定性与流畅度
 
-- [ ] 在行内操作后立即刷新当前 Markdown 预览，包括记录进度、编辑、删除、新增 KR、延期等操作
-- [ ] 减少由弹窗回调和元数据事件同时触发的重复 Dashboard 刷新
-- [ ] 将 Objective 文件发现逻辑从全 Vault 扫描改为仅在已配置 OKR 根目录下查找
+- [x] 在行内操作后立即刷新当前 Markdown 预览，包括记录进度、编辑、删除、新增 KR、延期等操作
+- [x] 减少由弹窗回调和元数据事件同时触发的重复 Dashboard 刷新
+- [x] 将 Objective 文件发现逻辑从全 Vault 扫描改为仅在已配置 OKR 根目录下查找
 - [ ] 为 KR 建立快速索引，避免记录进度和定位目标时跨周期扫描
 
 ### P1：OKR 核心流程完善

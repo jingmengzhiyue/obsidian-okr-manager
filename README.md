@@ -12,7 +12,7 @@ Plan, track, and review Objectives and Key Results directly inside your Obsidian
 
 </div>
 
----
+***
 
 ![snapshot](assets/OKR.gif)
 
@@ -49,12 +49,12 @@ The plugin is local-first by design:
 
 ## Requirements
 
-| Item | Requirement |
-|------|------|
-| Obsidian | `1.4.4` or later |
-| Platform | Windows, macOS, Linux, iOS, Android |
-| Plugin ID | `vault-okr-manager` |
-| Desktop only | `false` |
+| Item         | Requirement                         |
+| ------------ | ----------------------------------- |
+| Obsidian     | `1.4.4` or later                    |
+| Platform     | Windows, macOS, Linux, iOS, Android |
+| Plugin ID    | `vault-okr-manager`                 |
+| Desktop only | `false`                             |
 
 ## Installation
 
@@ -100,12 +100,12 @@ YourVault/
 
 Open **Settings → Vault OKR Manager** and review the defaults:
 
-| Setting | Default | Description |
-|------|------|------|
-| `Objective directory` | `OKR` | Root folder for all objective files |
-| `Default period type` | `quarter` | Default period type for new objectives |
-| `Auto-calculate progress` | `true` | Recalculate progress automatically from current and target values |
-| `Open dashboard on startup` | `false` | Automatically open the dashboard when Obsidian starts |
+| Setting                     | Default   | Description                                                       |
+| --------------------------- | --------- | ----------------------------------------------------------------- |
+| `Objective directory`       | `OKR`     | Root folder for all objective files                               |
+| `Default period type`       | `quarter` | Default period type for new objectives                            |
+| `Auto-calculate progress`   | `true`    | Recalculate progress automatically from current and target values |
+| `Open dashboard on startup` | `false`   | Automatically open the dashboard when Obsidian starts             |
 
 ### 2. Create your first objective
 
@@ -176,23 +176,23 @@ Instead, each objective file contains all related key results and their progress
 
 Command labels follow the active plugin language. In English, the commands are:
 
-| Command | Description |
-|------|------|
-| `New objective` | Create a new objective |
-| `New key result` | Add a key result to an objective |
+| Command           | Description                               |
+| ----------------- | ----------------------------------------- |
+| `New objective`   | Create a new objective                    |
+| `New key result`  | Add a key result to an objective          |
 | `Record progress` | Record a progress update for a key result |
-| `Open dashboard` | Open or focus the OKR dashboard |
+| `Open dashboard`  | Open or focus the OKR dashboard           |
 
 If Obsidian is using Simplified Chinese, the plugin UI and command names switch to Chinese automatically.
 
 ### Period formats
 
-| Type | Format | Example |
-|------|------|------|
-| Week | `YYYY-Www` | `2026-W20` |
-| Month | `YYYY-MM` | `2026-05` |
-| Quarter | `YYYY-Qn` | `2026-Q2` |
-| Year | `YYYY` | `2026` |
+| Type    | Format     | Example    |
+| ------- | ---------- | ---------- |
+| Week    | `YYYY-Www` | `2026-W20` |
+| Month   | `YYYY-MM`  | `2026-05`  |
+| Quarter | `YYYY-Qn`  | `2026-Q2`  |
+| Year    | `YYYY`     | `2026`     |
 
 ### Objective file model
 
