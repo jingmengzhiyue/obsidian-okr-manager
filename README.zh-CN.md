@@ -14,7 +14,7 @@
 
 ---
 
-> 截图 TODO：建议至少补一张 Dashboard 截图和一段拖拽排序的短 GIF。
+![snapshot](assets\OKR.gif)
 
 ## 简介
 

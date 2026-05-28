@@ -14,7 +14,7 @@ Plan, track, and review Objectives and Key Results directly inside your Obsidian
 
 ---
 
-> Screenshot TODO: add one dashboard screenshot and one short GIF showing drag-and-drop reordering.
+![snapshot](assets\OKR.gif)
 
 ## Overview
 
