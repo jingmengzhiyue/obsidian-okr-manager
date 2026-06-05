@@ -7,6 +7,8 @@ const i18nModule = await import("../src/i18n/index.ts");
 const typesModule = await import("../src/types.ts");
 let fileTreeModule;
 let previewRefreshModule;
+let workspaceCompatModule;
+let documentCompatModule;
 
 try {
 	fileTreeModule = await import("../src/utils/fileTree.ts");
@@ -20,6 +22,18 @@ try {
 	previewRefreshModule = {};
 }
 
+try {
+	workspaceCompatModule = await import("../src/utils/workspace.ts");
+} catch {
+	workspaceCompatModule = {};
+}
+
+try {
+	documentCompatModule = await import("../src/utils/document.ts");
+} catch {
+	documentCompatModule = {};
+}
+
 const { normalizeKeyResultOrders, reorderKeyResultOrders } =
 	sortModule.default ?? sortModule;
 const { getObjectiveDeadlineState } =
@@ -30,6 +44,10 @@ const { collectMarkdownFilesFromTree } =
 	fileTreeModule.default ?? fileTreeModule;
 const { shouldRefreshActivePreview } =
 	previewRefreshModule.default ?? previewRefreshModule;
+const { revealLeafCompat } =
+	workspaceCompatModule.default ?? workspaceCompatModule;
+const { getElementDocument, isActiveElement } =
+	documentCompatModule.default ?? documentCompatModule;
 
 test("normalizeKeyResultOrders falls back to KR id when order values collide", () => {
 	const items = [
@@ -187,4 +205,58 @@ test("getObjectiveDeadlineState returns English labels when locale is en", () =>
 	assert.equal(state.tone, "due-soon");
 	assert.equal(state.label, "Due in 2 days");
 	assert.equal(state.helpText, "Due date 2026-05-29");
+});
+
+test("revealLeafCompat prefers revealLeaf when available", async () => {
+	assert.equal(typeof revealLeafCompat, "function");
+
+	const calls = [];
+	const leaf = { id: "dashboard" };
+	const workspace = {
+		async revealLeaf(target) {
+			calls.push(["revealLeaf", target]);
+		},
+		setActiveLeaf(target, params) {
+			calls.push(["setActiveLeaf", target, params]);
+		},
+	};
+
+	await revealLeafCompat(workspace, leaf);
+
+	assert.deepEqual(calls, [["revealLeaf", leaf]]);
+});
+
+test("revealLeafCompat falls back to setActiveLeaf for older workspaces", async () => {
+	assert.equal(typeof revealLeafCompat, "function");
+
+	const calls = [];
+	const leaf = { id: "dashboard" };
+	const workspace = {
+		setActiveLeaf(target, params) {
+			calls.push(["setActiveLeaf", target, params]);
+		},
+	};
+
+	await revealLeafCompat(workspace, leaf);
+
+	assert.deepEqual(calls, [["setActiveLeaf", leaf, { focus: true }]]);
+});
+
+test("getElementDocument and isActiveElement use the element document context", () => {
+	assert.equal(typeof getElementDocument, "function");
+	assert.equal(typeof isActiveElement, "function");
+
+	const docA = { activeElement: null, name: "A" };
+	const docB = { activeElement: null, name: "B" };
+	const inputA = { doc: docA, id: "input-a" };
+	const inputB = { doc: docB, id: "input-b" };
+	docA.activeElement = inputA;
+	docB.activeElement = inputB;
+
+	assert.equal(getElementDocument(inputA), docA);
+	assert.equal(getElementDocument({ doc: docB }, docA), docB);
+	assert.equal(getElementDocument(undefined, docA), docA);
+	assert.equal(isActiveElement(inputA), true);
+	assert.equal(isActiveElement(inputB), true);
+	assert.equal(isActiveElement(inputA, docB), false);
 });

@@ -8,6 +8,7 @@ import { NewKRModal } from "./modals/NewKRModal";
 import { CheckInModal } from "./modals/CheckInModal";
 import { SettingsTab } from "./settings/SettingsTab";
 import { createI18n, detectLocale, type I18n } from "./i18n";
+import { revealLeafCompat } from "./utils/workspace";
 
 export default class OKRPlugin extends Plugin {
 	settings!: OKRPluginSettings;
@@ -115,7 +116,7 @@ export default class OKRPlugin extends Plugin {
 		const targetLeaves =
 			this.app.workspace.getLeavesOfType(DASHBOARD_VIEW_TYPE);
 		if (targetLeaves.length > 0) {
-			void this.app.workspace.revealLeaf(targetLeaves[0]!);
+			void revealLeafCompat(this.app.workspace, targetLeaves[0]!);
 		}
 	}
 

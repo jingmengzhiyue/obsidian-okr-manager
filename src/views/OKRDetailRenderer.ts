@@ -24,12 +24,14 @@ import {
 	OKR_TYPE_OBJECTIVE,
 } from "../constants";
 import { shouldRefreshActivePreview } from "../utils/previewRefresh";
+import { revealLeafCompat } from "../utils/workspace";
 
 export class OKRDetailRenderer {
 	static postProcessor(
 		manager: OKRManager,
 	): (el: HTMLElement, ctx: MarkdownPostProcessorContext) => Promise<void> {
 		return async (el: HTMLElement, ctx: MarkdownPostProcessorContext) => {
+			const doc = el.doc;
 			const filePath = normalizePath(ctx.sourcePath);
 			const rootDir = normalizePath(manager.getSettings().rootDir);
 			if (!filePath.startsWith(`${rootDir}/`)) {
@@ -66,6 +68,7 @@ export class OKRDetailRenderer {
 						filePath,
 						keyResults: [],
 					},
+					doc,
 				);
 				this.replaceCommentBlock(
 					el,
@@ -372,15 +375,16 @@ export class OKRDetailRenderer {
 	private static renderObjectiveSection(
 		i18n: I18n,
 		objective: Objective,
+		doc: Document,
 	): DocumentFragment {
-		const fragment = document.createDocumentFragment();
+		const fragment = doc.createDocumentFragment();
 		const deadlineState = getObjectiveDeadlineState(
 			objective,
 			undefined,
 			i18n,
 		);
 		fragment.appendChild(
-			this.renderObjectiveActionBar(objective, deadlineState, i18n),
+			this.renderObjectiveActionBar(objective, deadlineState, i18n, doc),
 		);
 		if (deadlineState.tone !== "normal") {
 			fragment.appendChild(
@@ -388,11 +392,12 @@ export class OKRDetailRenderer {
 					objective,
 					deadlineState,
 					i18n,
+					doc,
 				),
 			);
 		}
 
-		const table = document.createElement("table");
+		const table = doc.createElement("table");
 		table.className = "okr-inline-kr-table";
 		const thead = table.createEl("thead");
 		const headRow = thead.createEl("tr");
@@ -424,6 +429,7 @@ export class OKRDetailRenderer {
 						index + 1,
 						objective.keyResults.length,
 						i18n,
+						doc,
 					),
 				);
 			});
@@ -438,6 +444,7 @@ export class OKRDetailRenderer {
 		index: number,
 		total: number,
 		i18n: I18n,
+		doc: Document,
 	): HTMLTableRowElement {
 		const progressClass =
 			kr.progress >= 80
@@ -445,7 +452,7 @@ export class OKRDetailRenderer {
 				: kr.progress >= 40
 					? "okr-prog-medium"
 					: "okr-prog-low";
-		const row = document.createElement("tr");
+		const row = doc.createElement("tr");
 		row.createEl("td", { text: String(index) });
 		row.createEl("td", { text: kr.title });
 		row.createEl("td", { text: kr.owner || "-" });
@@ -476,6 +483,7 @@ export class OKRDetailRenderer {
 			this.createActionButton(
 				i18n.t("actions.recordCheckIn"),
 				"okr-inline-action-btn okr-inline-checkin-btn",
+				doc,
 				{ krId: kr.id },
 			),
 		);
@@ -483,12 +491,14 @@ export class OKRDetailRenderer {
 			this.createActionButton(
 				i18n.t("actions.edit"),
 				"okr-inline-action-btn okr-inline-edit-kr-btn",
+				doc,
 				{ krId: kr.id },
 			),
 		);
 		const moveUpButton = this.createActionButton(
 			i18n.t("actions.moveUp"),
 			"okr-inline-action-btn okr-inline-move-up-btn",
+			doc,
 			{ krId: kr.id, period: kr.period },
 		);
 		moveUpButton.disabled = index === 1;
@@ -496,6 +506,7 @@ export class OKRDetailRenderer {
 		const moveDownButton = this.createActionButton(
 			i18n.t("actions.moveDown"),
 			"okr-inline-action-btn okr-inline-move-down-btn",
+			doc,
 			{ krId: kr.id, period: kr.period },
 		);
 		moveDownButton.disabled = index === total;
@@ -504,6 +515,7 @@ export class OKRDetailRenderer {
 			this.createActionButton(
 				i18n.t("actions.delete"),
 				"okr-inline-action-btn okr-inline-action-danger okr-inline-delete-kr-btn",
+				doc,
 				{ krId: kr.id, krTitle: kr.title },
 			),
 		);
@@ -515,10 +527,11 @@ export class OKRDetailRenderer {
 		objective: Objective,
 		deadlineState: ReturnType<typeof getObjectiveDeadlineState>,
 		i18n: I18n,
+		doc: Document,
 	): HTMLDivElement {
-		const bar = document.createElement("div");
+		const bar = doc.createElement("div");
 		bar.className = "okr-inline-action-bar";
-		const summary = document.createElement("div");
+		const summary = doc.createElement("div");
 		summary.className = "okr-inline-objective-meta";
 		summary.createEl("span", {
 			text: deadlineState.helpText ?? deadlineState.label,
@@ -534,12 +547,14 @@ export class OKRDetailRenderer {
 			this.createActionButton(
 				i18n.t("actions.openDashboard"),
 				"okr-inline-action-btn okr-inline-open-dashboard-btn",
+				doc,
 			),
 		);
 		bar.appendChild(
 			this.createActionButton(
 				i18n.t("actions.addKeyResult"),
 				"okr-inline-action-btn okr-inline-add-kr-btn",
+				doc,
 				{
 					objectiveId: objective.id,
 					period: objective.period,
@@ -551,6 +566,7 @@ export class OKRDetailRenderer {
 				this.createActionButton(
 					i18n.t("actions.postpone"),
 					"okr-inline-action-btn okr-inline-postpone-objective-btn",
+					doc,
 					{
 						objectiveId: objective.id,
 						period: objective.period,
@@ -562,6 +578,7 @@ export class OKRDetailRenderer {
 			this.createActionButton(
 				i18n.t("actions.editObjective"),
 				"okr-inline-action-btn okr-inline-edit-objective-btn",
+				doc,
 				{
 					objectiveId: objective.id,
 					period: objective.period,
@@ -572,6 +589,7 @@ export class OKRDetailRenderer {
 			this.createActionButton(
 				i18n.t("actions.delete"),
 				"okr-inline-action-btn okr-inline-action-danger okr-inline-delete-objective-btn",
+				doc,
 				{
 					objectiveId: objective.id,
 					objectiveTitle: objective.title,
@@ -586,8 +604,9 @@ export class OKRDetailRenderer {
 		objective: Objective,
 		deadlineState: ReturnType<typeof getObjectiveDeadlineState>,
 		i18n: I18n,
+		doc: Document,
 	): HTMLDivElement {
-		const banner = document.createElement("div");
+		const banner = doc.createElement("div");
 		banner.className = `okr-inline-objective-alert okr-inline-objective-alert-${deadlineState.tone}`;
 		banner.createEl("strong", {
 			text: `${objective.id} ${deadlineState.label}`,
@@ -635,9 +654,10 @@ export class OKRDetailRenderer {
 	private static createActionButton(
 		text: string,
 		className: string,
+		doc: Document,
 		dataset: Record<string, string> = {},
 	): HTMLButtonElement {
-		const button = document.createElement("button");
+		const button = doc.createElement("button");
 		button.className = className;
 		button.type = "button";
 		button.textContent = text;
@@ -655,9 +675,11 @@ export class OKRDetailRenderer {
 			.replace(/^<!--\s*/, "")
 			.replace(/\s*-->$/, "")
 			.trim();
-		const walker = document.createTreeWalker(
+		const nodeFilter =
+			container.doc.defaultView?.NodeFilter ?? NodeFilter;
+		const walker = container.doc.createTreeWalker(
 			container,
-			NodeFilter.SHOW_COMMENT,
+			nodeFilter.SHOW_COMMENT,
 		);
 		let current = walker.nextNode();
 		while (current) {
@@ -685,7 +707,7 @@ export class OKRDetailRenderer {
 			});
 		}
 
-		await app.workspace.revealLeaf(leaf);
+		await revealLeafCompat(app.workspace, leaf);
 	}
 
 	private static async refreshPreview(

@@ -3,6 +3,7 @@ import { type TranslationValue } from "../i18n";
 import { OKRManager } from "../manager/OKRManager";
 import { KeyResult } from "../types";
 import { getTodayLocalDate } from "../utils/date";
+import { getElementDocument, isActiveElement } from "../utils/document";
 
 interface CheckInModalOptions {
 	prefillKrId?: string;
@@ -33,6 +34,7 @@ export class CheckInModal extends Modal {
 	async onOpen(): Promise<void> {
 		await super.onOpen();
 		const { contentEl } = this;
+		const modalDoc = getElementDocument(this.modalEl);
 		contentEl.empty();
 		this.modalEl.addClass("okr-modal");
 
@@ -152,7 +154,7 @@ export class CheckInModal extends Modal {
 			slider.value = String(this.progress);
 			sliderVal.setText(`${this.progress}%`);
 			this.current = this.calculateCurrentFromProgress();
-			if (document.activeElement !== currentInput) {
+			if (!isActiveElement(currentInput, modalDoc)) {
 				currentInput.value = String(this.current);
 			}
 			this.validate();
@@ -178,7 +180,7 @@ export class CheckInModal extends Modal {
 			progressInput.removeClass("okr-invalid");
 			progressError.removeClass("visible");
 			this.current = this.calculateCurrentFromProgress();
-			if (document.activeElement !== currentInput) {
+			if (!isActiveElement(currentInput, modalDoc)) {
 				currentInput.value = String(this.current);
 			}
 			this.validate();
@@ -246,8 +248,8 @@ export class CheckInModal extends Modal {
 
 			if (
 				e.key === "Enter" &&
-				document.activeElement !== noteInput &&
-				document.activeElement !== blockerInput
+				!isActiveElement(noteInput, modalDoc) &&
+				!isActiveElement(blockerInput, modalDoc)
 			) {
 				e.preventDefault();
 				void this.submit();

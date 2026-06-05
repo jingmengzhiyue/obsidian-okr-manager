@@ -3,6 +3,7 @@ import { type TranslationValue } from "../i18n";
 import { OKRManager } from "../manager/OKRManager";
 import { OKRPeriodType } from "../types";
 import { getTodayLocalDate } from "../utils/date";
+import { getElementDocument, isActiveElement } from "../utils/document";
 
 export class NewObjectiveModal extends Modal {
 	private period: string = "";
@@ -28,6 +29,7 @@ export class NewObjectiveModal extends Modal {
 	onOpen(): void {
 		void super.onOpen();
 		const { contentEl } = this;
+		const modalDoc = getElementDocument(this.modalEl);
 		contentEl.empty();
 		this.modalEl.addClass("okr-modal");
 		const parser = this.manager.getParser();
@@ -189,7 +191,7 @@ export class NewObjectiveModal extends Modal {
 				return;
 			}
 
-			if (e.key === "Enter" && document.activeElement !== descInput) {
+			if (e.key === "Enter" && !isActiveElement(descInput, modalDoc)) {
 				e.preventDefault();
 				void this.submit();
 			}

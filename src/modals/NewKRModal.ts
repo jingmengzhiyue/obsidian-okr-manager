@@ -3,6 +3,7 @@ import { type TranslationValue } from "../i18n";
 import { OKRManager } from "../manager/OKRManager";
 import { Confidence } from "../types";
 import { getTodayLocalDate } from "../utils/date";
+import { getElementDocument, isActiveElement } from "../utils/document";
 
 interface NewKRModalOptions {
 	initialPeriod?: string;
@@ -36,6 +37,7 @@ export class NewKRModal extends Modal {
 	async onOpen(): Promise<void> {
 		await super.onOpen();
 		const { contentEl } = this;
+		const modalDoc = getElementDocument(this.modalEl);
 		contentEl.empty();
 		this.modalEl.addClass("okr-modal");
 
@@ -296,7 +298,7 @@ export class NewKRModal extends Modal {
 				return;
 			}
 
-			if (e.key === "Enter" && document.activeElement !== descInput) {
+			if (e.key === "Enter" && !isActiveElement(descInput, modalDoc)) {
 				e.preventDefault();
 				void this.submit();
 			}
