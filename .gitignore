@@ -2,7 +2,7 @@
 .vscode/
 .idea/
 *.iml
-
+.claude/
 # Dependencies
 node_modules/
 
