@@ -1,8 +1,8 @@
 {
 	"id": "vault-okr-manager",
 	"name": "Vault OKR Manager",
-	"version": "1.0.0",
-	"minAppVersion": "1.4.4",
+	"version": "1.0.1",
+	"minAppVersion": "1.7.2",
 	"description": "Manage OKRs inside your vault with a streamlined dashboard and built-in check-ins.",
 	"author": "jingmengzhiyue",
 	"authorUrl": "https://github.com/jingmengzhiyue",
