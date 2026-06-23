@@ -417,19 +417,29 @@
   text-align: right;
 }
 
-.okr-kr-bar-wrap {
-  width: 52px;
-  height: 3px;
-  background: var(--background-modifier-border);
-  border-radius: 2px;
-  overflow: hidden;
+/* KR 圆环进度 */
+.okr-kr-ring-wrap {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.okr-kr-bar-fill {
-  height: 100%;
-  border-radius: 2px;
-  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+.okr-kr-ring-svg {
+  display: block;
 }
+
+.okr-kr-ring-track {
+  stroke: var(--background-modifier-border);
+}
+
+.okr-kr-ring-fill {
+  transition: stroke-dashoffset 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.okr-kr-ring-fill.okr-prog-high   { stroke: var(--color-green); }
+.okr-kr-ring-fill.okr-prog-medium { stroke: var(--color-yellow); }
+.okr-kr-ring-fill.okr-prog-low    { stroke: var(--color-red); }
 
 .okr-kr-pct {
   font-size: 11px;
@@ -971,7 +981,6 @@
   .okr-summary-bar { padding: 8px 10px; }
   .okr-summary-num { font-size: 16px; }
   .okr-kr-value { display: none; } /* 小屏隐藏 current/target 数字 */
-  .okr-kr-bar-wrap { width: 36px; }
 }
 
 /* ---------- 动画 ---------- */

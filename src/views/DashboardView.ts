@@ -366,13 +366,7 @@ export class DashboardView extends ItemView {
 			cls: "okr-kr-value",
 			text: `${kr.current} / ${kr.target}`,
 		});
-		this.renderProgressBar(
-			right,
-			kr.progress,
-			undefined,
-			"okr-kr-bar-wrap",
-			"okr-kr-bar-fill",
-		);
+		this.renderProgressRing(right, kr.progress);
 		right.createEl("span", { cls: "okr-kr-pct", text: `${kr.progress}%` });
 
 		const checkInButton = right.createEl("button", {
@@ -604,6 +598,58 @@ export class DashboardView extends ItemView {
 					? "okr-prog-medium"
 					: "okr-prog-low",
 		);
+	}
+
+	private renderProgressRing(
+		container: HTMLElement,
+		progress: number,
+		size = 20,
+		stroke = 3,
+	): void {
+		const radius = (size - stroke) / 2;
+		const circumference = 2 * Math.PI * radius;
+		const offset = circumference * (1 - progress / 100);
+		const colorClass =
+			progress >= 80
+				? "okr-prog-high"
+				: progress >= 40
+					? "okr-prog-medium"
+					: "okr-prog-low";
+
+		const wrap = container.createDiv("okr-kr-ring-wrap");
+		wrap.setAttribute("aria-hidden", "true");
+		const svg = wrap.createSvg("svg", {
+			cls: "okr-kr-ring-svg",
+			attr: {
+				width: size,
+				height: size,
+				viewBox: `0 0 ${size} ${size}`,
+			},
+		});
+		svg.createSvg("circle", {
+			cls: "okr-kr-ring-track",
+			attr: {
+				cx: size / 2,
+				cy: size / 2,
+				r: radius,
+				fill: "none",
+				"stroke-width": stroke,
+			},
+		});
+		svg.createSvg("circle", {
+			cls: ["okr-kr-ring-fill", colorClass],
+			attr: {
+				cx: size / 2,
+				cy: size / 2,
+				r: radius,
+				fill: "none",
+				"stroke-width": stroke,
+				"stroke-dasharray": circumference.toFixed(2),
+				"stroke-dashoffset": offset.toFixed(2),
+				"stroke-linecap": "round",
+				transform: `rotate(-90 ${size / 2} ${size / 2})`,
+			},
+		});
 	}
 
 	private renderEmptyState(container: HTMLElement): void {
