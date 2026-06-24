@@ -9,7 +9,6 @@ import {
 import { OKRManager } from "../manager/OKRManager";
 import { CheckInModal } from "../modals/CheckInModal";
 import { ConfirmModal } from "../modals/ConfirmModal";
-import { EditKRModal } from "../modals/EditKRModal";
 import { EditObjectiveModal } from "../modals/EditObjectiveModal";
 import { NewKRModal } from "../modals/NewKRModal";
 import { NewObjectiveModal } from "../modals/NewObjectiveModal";
@@ -254,12 +253,18 @@ export class DashboardView extends ItemView {
 		setIcon(collapseBtn, "chevron-right");
 		collapseBtn.addEventListener("click", (event) => {
 			event.stopPropagation();
-			if (this.collapsedObjs.has(obj.id)) {
-				this.collapsedObjs.delete(obj.id);
-			} else {
+			const willCollapse = !this.collapsedObjs.has(obj.id);
+			if (willCollapse) {
 				this.collapsedObjs.add(obj.id);
+			} else {
+				this.collapsedObjs.delete(obj.id);
 			}
-			this.scheduleRender();
+			krList.toggleClass("is-collapsed", willCollapse);
+			collapseBtn.toggleClass("okr-collapsed", willCollapse);
+			collapseBtn.setAttribute(
+				"aria-label",
+				willCollapse ? this.t("actions.expand") : this.t("actions.collapse"),
+			);
 		});
 
 		headerLeft.createEl("span", { cls: "okr-obj-id", text: obj.id });
@@ -362,10 +367,6 @@ export class DashboardView extends ItemView {
 		});
 
 		const right = row.createDiv("okr-kr-row-right");
-		right.createEl("span", {
-			cls: "okr-kr-value",
-			text: `${kr.current} / ${kr.target}`,
-		});
 		this.renderProgressRing(right, kr.progress);
 		right.createEl("span", { cls: "okr-kr-pct", text: `${kr.progress}%` });
 
@@ -382,44 +383,6 @@ export class DashboardView extends ItemView {
 			event.stopPropagation();
 			new CheckInModal(this.app, this.manager, {
 				prefillKrId: kr.id,
-			}).open();
-		});
-
-		const editButton = right.createEl("button", {
-			cls: "okr-row-action-btn",
-			text: this.t("actions.edit"),
-		});
-		editButton.setAttribute("aria-label", this.t("actions.editKeyResult"));
-		editButton.addEventListener("click", (event) => {
-			event.stopPropagation();
-			new EditKRModal(this.app, this.manager, kr).open();
-		});
-
-		const deleteButton = right.createEl("button", {
-			cls: "okr-row-action-btn okr-row-action-danger",
-			text: this.t("actions.delete"),
-		});
-		deleteButton.setAttribute("aria-label", this.t("actions.delete"));
-		deleteButton.addEventListener("click", (event) => {
-			event.stopPropagation();
-			new ConfirmModal(this.app, {
-				title: `${this.t("actions.delete")} ${kr.id}`,
-				message: this.t("detail.deleteKeyResultConfirm", {
-					title: kr.title,
-				}),
-				confirmText: this.t("actions.delete"),
-				errorNotice: this.t("detail.deleteKeyResultFailed", {
-					title: kr.title,
-				}),
-				onConfirm: async () => {
-					await this.manager.deleteKeyResult(kr.id, kr.period);
-					new Notice(
-						this.t("detail.deleteKeyResultSuccess", {
-							title: kr.title,
-						}),
-					);
-					this.scheduleRender();
-				},
 			}).open();
 		});
 
@@ -590,7 +553,7 @@ export class DashboardView extends ItemView {
 		const wrap = wrapClass ? container.createDiv(wrapClass) : container;
 		const track = wrap.createDiv(trackClass);
 		const fill = track.createDiv(fillClass);
-		fill.style.width = `${progress}%`;
+		fill.style.setProperty("--okr-progress", String(progress / 100));
 		fill.addClass(
 			progress >= 80
 				? "okr-prog-high"

@@ -1,7 +1,9 @@
 import { App, Modal, Notice } from "obsidian";
 import { type TranslationValue } from "../i18n";
 import { OKRManager } from "../manager/OKRManager";
-import { Objective } from "../types";
+import { KeyResult, Objective } from "../types";
+import { ConfirmModal } from "./ConfirmModal";
+import { EditKRModal } from "./EditKRModal";
 
 interface EditObjectiveModalOptions {
 	onComplete?: () => void;
@@ -13,6 +15,8 @@ export class EditObjectiveModal extends Modal {
 	private due = "";
 	private description = "";
 	private status: Objective["status"];
+	private keyResults: KeyResult[];
+	private keyResultsContainer: HTMLElement | null = null;
 	private isSubmitting = false;
 	private validate!: () => void;
 
@@ -28,6 +32,7 @@ export class EditObjectiveModal extends Modal {
 		this.due = objective.due;
 		this.description = objective.description;
 		this.status = objective.status;
+		this.keyResults = [...objective.keyResults];
 	}
 
 	onOpen(): void {
@@ -133,6 +138,8 @@ export class EditObjectiveModal extends Modal {
 			this.description = descInput.value.trim();
 		});
 
+		this.renderKeyResultsSection(contentEl);
+
 		const footer = contentEl.createDiv("okr-modal-footer");
 		const cancelBtn = footer.createEl("button", {
 			cls: "okr-btn-cancel",
@@ -205,6 +212,97 @@ export class EditObjectiveModal extends Modal {
 		const label = container.createEl("label", { cls: "okr-label" });
 		label.appendText(text);
 		label.createEl("span", { cls: "okr-required", text: "*" });
+	}
+
+	private renderKeyResultsSection(container: HTMLElement): void {
+		const section = container.createDiv("okr-field");
+		section.createEl("label", {
+			cls: "okr-label",
+			text: this.t("template.keyResultsHeading"),
+		});
+		this.keyResultsContainer = section.createDiv("okr-edit-obj-kr-list");
+		this.renderKeyResults();
+	}
+
+	private renderKeyResults(): void {
+		if (!this.keyResultsContainer) {
+			return;
+		}
+		this.keyResultsContainer.empty();
+		if (this.keyResults.length === 0) {
+			this.keyResultsContainer.createEl("div", {
+				cls: "okr-edit-obj-kr-empty",
+				text: this.t("detail.emptyKeyResults"),
+			});
+			return;
+		}
+		for (const keyResult of this.keyResults) {
+			this.renderKeyResultItem(keyResult);
+		}
+	}
+
+	private renderKeyResultItem(keyResult: KeyResult): void {
+		if (!this.keyResultsContainer) {
+			return;
+		}
+		const item = this.keyResultsContainer.createDiv("okr-edit-obj-kr-item");
+		item.createEl("span", {
+			cls: "okr-edit-obj-kr-title",
+			text: keyResult.title,
+		});
+
+		const actions = item.createDiv("okr-edit-obj-kr-actions");
+		const editButton = actions.createEl("button", {
+			cls: "okr-edit-obj-kr-btn",
+			text: this.t("actions.edit"),
+		});
+		editButton.setAttribute("type", "button");
+		editButton.addEventListener("click", () => {
+			new EditKRModal(this.app, this.manager, keyResult, {
+				onComplete: () => {
+					void this.refreshKeyResults();
+				},
+			}).open();
+		});
+
+		const deleteButton = actions.createEl("button", {
+			cls: "okr-edit-obj-kr-btn okr-edit-obj-kr-btn-danger",
+			text: this.t("actions.delete"),
+		});
+		deleteButton.setAttribute("type", "button");
+		deleteButton.addEventListener("click", () => {
+			new ConfirmModal(this.app, {
+				title: `${this.t("actions.delete")} ${keyResult.id}`,
+				message: this.t("detail.deleteKeyResultConfirm", {
+					title: keyResult.title,
+				}),
+				confirmText: this.t("actions.delete"),
+				errorNotice: this.t("detail.deleteKeyResultFailed", {
+					title: keyResult.title,
+				}),
+				onConfirm: async () => {
+					await this.manager.deleteKeyResult(
+						keyResult.id,
+						keyResult.period,
+					);
+					new Notice(
+						this.t("detail.deleteKeyResultSuccess", {
+							title: keyResult.title,
+						}),
+					);
+					await this.refreshKeyResults();
+				},
+			}).open();
+		});
+	}
+
+	private async refreshKeyResults(): Promise<void> {
+		const refreshed = await this.manager.getKeyResults(
+			this.objective.id,
+			this.objective.period,
+		);
+		this.keyResults = refreshed;
+		this.renderKeyResults();
 	}
 
 	private t(
