@@ -5,6 +5,7 @@ const sortModule = await import("../src/utils/sort.ts");
 const objectiveStatusModule = await import("../src/utils/objectiveStatus.ts");
 const i18nModule = await import("../src/i18n/index.ts");
 const typesModule = await import("../src/types.ts");
+const managerModule = await import("../src/manager/OKRManager.ts");
 let fileTreeModule;
 let previewRefreshModule;
 let workspaceCompatModule;
@@ -40,6 +41,7 @@ const { getObjectiveDeadlineState } =
 	objectiveStatusModule.default ?? objectiveStatusModule;
 const { createI18n, resolveLocale } = i18nModule.default ?? i18nModule;
 const { DEFAULT_SETTINGS } = typesModule.default ?? typesModule;
+const { OKRManager } = managerModule.default ?? managerModule;
 const { collectMarkdownFilesFromTree } =
 	fileTreeModule.default ?? fileTreeModule;
 const { shouldRefreshActivePreview } =
@@ -259,4 +261,124 @@ test("getElementDocument and isActiveElement use the element document context", 
 	assert.equal(isActiveElement(inputA), true);
 	assert.equal(isActiveElement(inputB), true);
 	assert.equal(isActiveElement(inputA, docB), false);
+});
+
+test("recordCheckIn locates duplicate KR ids within the selected period", async () => {
+	const manager = new OKRManager({}, DEFAULT_SETTINGS, createI18n("en"));
+	let receivedPeriod;
+	manager.findObjectiveEntryByKRId = async (_krId, period) => {
+		receivedPeriod = period;
+		if (period !== "2026-Q2") {
+			return null;
+		}
+
+		return {
+			file: { path: "OKR/2026-Q2/O1.md" },
+			objective: {
+				id: "O1",
+				period: "2026-Q2",
+				periodType: "quarter",
+				title: "Q2 objective",
+				description: "",
+				owner: "Team",
+				status: "active",
+				progress: 20,
+				created: "2026-04-01",
+				due: "2026-06-30",
+				filePath: "OKR/2026-Q2/O1.md",
+				keyResults: [
+					{
+						id: "O1-KR1",
+						objectiveId: "O1",
+						period: "2026-Q2",
+						periodType: "quarter",
+						order: 0,
+						title: "Q2 KR",
+						description: "",
+						owner: "Team",
+						unit: "number",
+						current: 2,
+						target: 10,
+						progress: 20,
+						status: "active",
+						confidence: "medium",
+						created: "2026-04-01",
+						due: "2026-06-30",
+						filePath: "OKR/2026-Q2/O1.md",
+						checkIns: [],
+					},
+				],
+			},
+		};
+	};
+	manager.writeObjective = async () => {};
+
+	await manager.recordCheckIn({
+		krId: "O1-KR1",
+		period: "2026-Q2",
+		date: "2026-05-01",
+		progress: 25,
+		note: "",
+		blocker: "",
+	});
+
+	assert.equal(receivedPeriod, "2026-Q2");
+});
+
+test("recordCheckIn preserves the exact current value entered by the user", async () => {
+	const manager = new OKRManager({}, DEFAULT_SETTINGS, createI18n("en"));
+	let writtenObjective;
+	manager.findObjectiveEntryByKRId = async () => ({
+		file: { path: "OKR/2026-Q2/O1.md" },
+		objective: {
+			id: "O1",
+			period: "2026-Q2",
+			periodType: "quarter",
+			title: "Q2 objective",
+			description: "",
+			owner: "Team",
+			status: "active",
+			progress: 20,
+			created: "2026-04-01",
+			due: "2026-06-30",
+			filePath: "OKR/2026-Q2/O1.md",
+			keyResults: [
+				{
+					id: "O1-KR1",
+					objectiveId: "O1",
+					period: "2026-Q2",
+					periodType: "quarter",
+					order: 0,
+					title: "Q2 KR",
+					description: "",
+					owner: "Team",
+					unit: "number",
+					current: 2,
+					target: 10,
+					progress: 20,
+					status: "active",
+					confidence: "medium",
+					created: "2026-04-01",
+					due: "2026-06-30",
+					filePath: "OKR/2026-Q2/O1.md",
+					checkIns: [],
+				},
+			],
+		},
+	});
+	manager.writeObjective = async (_file, objective) => {
+		writtenObjective = objective;
+	};
+
+	await manager.recordCheckIn({
+		krId: "O1-KR1",
+		period: "2026-Q2",
+		date: "2026-05-01",
+		current: 2.5,
+		progress: 25,
+		note: "",
+		blocker: "",
+	});
+
+	assert.equal(writtenObjective.keyResults[0].current, 2.5);
 });

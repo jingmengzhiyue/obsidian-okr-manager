@@ -7,11 +7,13 @@ import { getElementDocument, isActiveElement } from "../utils/document";
 
 interface CheckInModalOptions {
 	prefillKrId?: string;
+	prefillPeriod?: string;
 	onComplete?: () => void;
 }
 
 export class CheckInModal extends Modal {
 	private krId = "";
+	private period = "";
 	private date: string = "";
 	private current: number = 0;
 	private progress: number = 0;
@@ -28,6 +30,7 @@ export class CheckInModal extends Modal {
 	) {
 		super(app);
 		this.krId = options.prefillKrId ?? "";
+		this.period = options.prefillPeriod ?? "";
 		this.date = getTodayLocalDate();
 	}
 
@@ -44,8 +47,14 @@ export class CheckInModal extends Modal {
 		});
 
 		this.krs = await this.loadAllKeyResults();
+		if (this.krId) {
+			const selected = this.findSelectedKR();
+			this.period = selected?.period ?? this.period;
+		}
 		if (!this.krId && this.krs.length > 0) {
-			this.krId = this.krs[0]?.id ?? "";
+			const first = this.krs[0];
+			this.krId = first?.id ?? "";
+			this.period = first?.period ?? "";
 		}
 		this.syncSelectedKRValues();
 
@@ -61,14 +70,16 @@ export class CheckInModal extends Modal {
 		} else {
 			for (const kr of this.krs) {
 				krSelect.createEl("option", {
-					text: `${kr.id} ${kr.title}`,
-					value: kr.id,
+					text: `${kr.period} · ${kr.id} ${kr.title}`,
+					value: this.getSelectValue(kr),
 				});
 			}
 		}
-		krSelect.value = this.krId;
+		krSelect.value = this.getSelectedValue();
 		krSelect.addEventListener("change", () => {
-			this.krId = krSelect.value;
+			const selected = this.parseSelectValue(krSelect.value);
+			this.period = selected.period;
+			this.krId = selected.krId;
 			this.syncSelectedKRValues();
 			currentInput.value = String(this.current);
 			progressInput.value = String(this.progress);
@@ -268,7 +279,9 @@ export class CheckInModal extends Modal {
 		try {
 			await this.manager.recordCheckIn({
 				krId: this.krId,
+				period: this.period,
 				date: this.date,
+				current: this.current,
 				progress: this.progress,
 				note: this.note,
 				blocker: this.blocker,
@@ -307,7 +320,7 @@ export class CheckInModal extends Modal {
 	}
 
 	private syncSelectedKRValues(): void {
-		const selected = this.krs.find((kr) => kr.id === this.krId);
+		const selected = this.findSelectedKR();
 		if (!selected) {
 			this.current = 0;
 			this.progress = 0;
@@ -319,7 +332,7 @@ export class CheckInModal extends Modal {
 	}
 
 	private calculateProgressFromCurrent(): number {
-		const kr = this.krs.find((item) => item.id === this.krId);
+		const kr = this.findSelectedKR();
 		if (!kr) {
 			return 0;
 		}
@@ -339,7 +352,7 @@ export class CheckInModal extends Modal {
 	}
 
 	private calculateCurrentFromProgress(): number {
-		const kr = this.krs.find((item) => item.id === this.krId);
+		const kr = this.findSelectedKR();
 		if (!kr) {
 			return 0;
 		}
@@ -353,6 +366,27 @@ export class CheckInModal extends Modal {
 		}
 
 		return Math.round((this.progress / 100) * kr.target);
+	}
+
+	private findSelectedKR(): KeyResult | undefined {
+		return this.krs.find(
+			(item) =>
+				item.id === this.krId &&
+				(!this.period || item.period === this.period),
+		);
+	}
+
+	private getSelectValue(keyResult: KeyResult): string {
+		return `${keyResult.period}::${keyResult.id}`;
+	}
+
+	private getSelectedValue(): string {
+		return this.period && this.krId ? `${this.period}::${this.krId}` : "";
+	}
+
+	private parseSelectValue(value: string): { period: string; krId: string } {
+		const [period = "", krId = ""] = value.split("::");
+		return { period, krId };
 	}
 
 	private createRequiredLabel(container: HTMLElement, text: string): void {

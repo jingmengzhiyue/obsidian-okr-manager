@@ -412,9 +412,12 @@ export class OKRManager {
 		params: Pick<
 			CheckIn,
 			"krId" | "date" | "progress" | "note" | "blocker"
-		>,
+		> & { period?: string; current?: number },
 	): Promise<void> {
-		const found = await this.findObjectiveEntryByKRId(params.krId);
+		const found = await this.findObjectiveEntryByKRId(
+			params.krId,
+			params.period ? this.normalizePeriod(params.period) : undefined,
+		);
 		if (!found) {
 			throw new Error(
 				this.t("errors.keyResultNotFound", { id: params.krId }),
@@ -431,7 +434,17 @@ export class OKRManager {
 		}
 
 		const history = keyResult.checkIns;
-		const progress = this.parser.clampProgress(params.progress);
+		const hasCurrent =
+			typeof params.current === "number" &&
+			Number.isFinite(params.current);
+		const progress =
+			this.settings.autoComputeProgress && hasCurrent
+				? this.parser.calculateKRProgress(
+						params.current!,
+						keyResult.target,
+						keyResult.unit,
+					)
+				: this.parser.clampProgress(params.progress);
 		const latestProgress = history[0]?.progress ?? 0;
 		const delta = history.length > 0 ? progress - latestProgress : progress;
 		const nextCheckIn: CheckIn = {
@@ -453,7 +466,9 @@ export class OKRManager {
 			return {
 				...item,
 				current: this.settings.autoComputeProgress
-					? this.inferCurrentFromProgress(item, progress)
+					? hasCurrent
+						? params.current!
+						: this.inferCurrentFromProgress(item, progress)
 					: item.current,
 				progress,
 				checkIns: [...item.checkIns, nextCheckIn].sort((left, right) =>

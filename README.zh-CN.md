@@ -4,9 +4,9 @@
 
 在 Obsidian Vault 中直接规划、追踪和复盘 OKR，提供专用 Dashboard、内嵌进度历史，以及完全本地的 Markdown 存储。
 
-![Obsidian](https://img.shields.io/badge/Obsidian-%3E%3D1.4.4-blueviolet)
+![Obsidian](https://img.shields.io/badge/Obsidian-%3E%3D1.7.2-blueviolet)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Version](https://img.shields.io/badge/version-1.1.0-blue)
 
 [English README](./README.md) · [功能特性](#功能特性) · [安装方法](#安装方法) · [快速开始](#快速开始) · [使用说明](#使用说明) · [常见问题](#常见问题)
 
@@ -51,7 +51,7 @@ Vault OKR Manager 是一个 Obsidian 社区插件，用于在你的 Vault 中管
 
 | 项目 | 要求 |
 |------|------|
-| Obsidian | `1.4.4` 及以上 |
+| Obsidian | `1.7.2` 及以上 |
 | 平台 | Windows / macOS / Linux / iOS / Android |
 | 插件 ID | `vault-okr-manager` |
 | 桌面独占 | `false` |
@@ -334,6 +334,8 @@ Dashboard 会显示超期提醒和状态标识，你也可以直接从界面里�
 - [ ] 提升多人协作能力，不再只依赖单个自由文本 owner 字段
 
 ## 开发
+
+需要 Node.js `20` 或更高版本。
 
 ```bash
 git clone https://github.com/jingmengzhiyue/obsidian-okr-manager.git

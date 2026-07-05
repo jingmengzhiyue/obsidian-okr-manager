@@ -4,9 +4,9 @@
 
 Plan, track, and review Objectives and Key Results directly inside your Obsidian vault with a dedicated dashboard, embedded progress history, and local-first Markdown storage.
 
-![Obsidian](https://img.shields.io/badge/Obsidian-%3E%3D1.4.4-blueviolet)
+![Obsidian](https://img.shields.io/badge/Obsidian-%3E%3D1.7.2-blueviolet)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Version](https://img.shields.io/badge/version-1.1.0-blue)
 
 [中文文档](./README.zh-CN.md) · [Features](#features) · [Installation](#installation) · [Quick Start](#quick-start) · [Usage](#usage) · [FAQ](#faq)
 
@@ -51,7 +51,7 @@ The plugin is local-first by design:
 
 | Item         | Requirement                         |
 | ------------ | ----------------------------------- |
-| Obsidian     | `1.4.4` or later                    |
+| Obsidian     | `1.7.2` or later                    |
 | Platform     | Windows, macOS, Linux, iOS, Android |
 | Plugin ID    | `vault-okr-manager`                 |
 | Desktop only | `false`                             |
@@ -334,6 +334,8 @@ The following backlog is based on a review of the current implementation, with p
 - [ ] Improve multi-owner and team-oriented management beyond single free-text owner fields
 
 ## Development
+
+Requires Node.js `20` or later.
 
 ```bash
 git clone https://github.com/jingmengzhiyue/obsidian-okr-manager.git

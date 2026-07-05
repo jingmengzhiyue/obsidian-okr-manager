@@ -383,6 +383,7 @@ export class DashboardView extends ItemView {
 			event.stopPropagation();
 			new CheckInModal(this.app, this.manager, {
 				prefillKrId: kr.id,
+				prefillPeriod: kr.period,
 			}).open();
 		});
 

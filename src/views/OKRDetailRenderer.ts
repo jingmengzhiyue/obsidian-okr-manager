@@ -163,6 +163,7 @@ export class OKRDetailRenderer {
 
 					new CheckInModal(manager.getApp(), manager, {
 						prefillKrId: krId,
+						prefillPeriod: button.dataset.period ?? "",
 						onComplete: rerenderCurrentPreview,
 					}).open();
 				});
@@ -484,7 +485,7 @@ export class OKRDetailRenderer {
 				i18n.t("actions.recordCheckIn"),
 				"okr-inline-action-btn okr-inline-checkin-btn",
 				doc,
-				{ krId: kr.id },
+				{ krId: kr.id, period: kr.period },
 			),
 		);
 		actions.appendChild(
