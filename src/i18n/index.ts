@@ -450,9 +450,6 @@ export function detectLocale(app?: unknown): SupportedLocale {
 		appRecord.locale,
 		appRecord.appLocale,
 		appRecord.vault?.getConfig?.("locale"),
-		typeof globalThis.localStorage !== "undefined"
-			? globalThis.localStorage.getItem("language")
-			: null,
 		typeof globalThis.document !== "undefined"
 			? globalThis.document.documentElement?.lang
 			: null,

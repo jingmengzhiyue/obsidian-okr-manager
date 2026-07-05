@@ -172,9 +172,13 @@ export class OKRManager {
 				this.getAllKeyResults(currentPeriod),
 			),
 		);
-		return nested
-			.flat()
-			.sort((left, right) => compareKeyResultIds(left.id, right.id));
+		const keyResults: KeyResult[] = [];
+		for (const periodKeyResults of nested) {
+			keyResults.push(...periodKeyResults);
+		}
+		return keyResults.sort((left, right) =>
+			compareKeyResultIds(left.id, right.id),
+		);
 	}
 
 	async getCheckIns(krId: string): Promise<CheckIn[]> {
@@ -705,17 +709,16 @@ export class OKRManager {
 		entry.keyResultsByObjective = new Map(
 			objectives.map((objective) => [objective.id, objective.keyResults]),
 		);
-		entry.allKeyResults = objectives.flatMap(
-			(objective) => objective.keyResults,
-		);
-		entry.checkIns = new Map(
-			objectives.flatMap((objective) =>
-				objective.keyResults.map((keyResult) => [
-					keyResult.id,
-					keyResult.checkIns,
-				]),
-			),
-		);
+		const allKeyResults: KeyResult[] = [];
+		const checkIns = new Map<string, CheckIn[]>();
+		for (const objective of objectives) {
+			for (const keyResult of objective.keyResults) {
+				allKeyResults.push(keyResult);
+				checkIns.set(keyResult.id, keyResult.checkIns);
+			}
+		}
+		entry.allKeyResults = allKeyResults;
+		entry.checkIns = checkIns;
 		entry.timestamp = Date.now();
 		return objectives;
 	}

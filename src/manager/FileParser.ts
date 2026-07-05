@@ -39,7 +39,7 @@ export class FileParser {
 	async readFrontmatter(file: TFile): Promise<Record<string, unknown>> {
 		const cache = this.app.metadataCache.getFileCache(file);
 		if (cache?.frontmatter) {
-			return cache.frontmatter as Record<string, unknown>;
+			return cache.frontmatter;
 		}
 		const content = await this.app.vault.read(file);
 		const match = content.match(/^---\n([\s\S]*?)\n---/);

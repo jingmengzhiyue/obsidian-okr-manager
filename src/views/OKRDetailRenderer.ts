@@ -662,9 +662,13 @@ export class OKRDetailRenderer {
 		button.className = className;
 		button.type = "button";
 		button.textContent = text;
-		Object.entries(dataset).forEach(([key, value]) => {
+		for (const key of Object.keys(dataset)) {
+			const value = dataset[key];
+			if (value == null) {
+				continue;
+			}
 			button.dataset[key] = value;
-		});
+		}
 		return button;
 	}
 

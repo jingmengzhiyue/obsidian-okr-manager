@@ -39,7 +39,8 @@ const { normalizeKeyResultOrders, reorderKeyResultOrders } =
 	sortModule.default ?? sortModule;
 const { getObjectiveDeadlineState } =
 	objectiveStatusModule.default ?? objectiveStatusModule;
-const { createI18n, resolveLocale } = i18nModule.default ?? i18nModule;
+const { createI18n, detectLocale, resolveLocale } =
+	i18nModule.default ?? i18nModule;
 const { DEFAULT_SETTINGS } = typesModule.default ?? typesModule;
 const { OKRManager } = managerModule.default ?? managerModule;
 const { collectMarkdownFilesFromTree } =
@@ -146,6 +147,31 @@ test("resolveLocale supports en and zh-CN and falls back to en", () => {
 	assert.equal(resolveLocale("zh-CN"), "zh-CN");
 	assert.equal(resolveLocale("zh-cn"), "zh-CN");
 	assert.equal(resolveLocale("fr-FR"), "en");
+});
+
+test("detectLocale ignores localStorage values to avoid plugin data storage warnings", () => {
+	const originalLocalStorage = globalThis.localStorage;
+	Object.defineProperty(globalThis, "localStorage", {
+		configurable: true,
+		value: {
+			getItem() {
+				throw new Error("detectLocale should not read localStorage");
+			},
+		},
+	});
+
+	try {
+		assert.doesNotThrow(() => detectLocale({}));
+	} finally {
+		if (originalLocalStorage === undefined) {
+			delete globalThis.localStorage;
+		} else {
+			Object.defineProperty(globalThis, "localStorage", {
+				configurable: true,
+				value: originalLocalStorage,
+			});
+		}
+	}
 });
 
 test("DEFAULT_SETTINGS no longer contains the legacy checkInsDir field", () => {
