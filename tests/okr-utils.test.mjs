@@ -6,6 +6,7 @@ const objectiveStatusModule = await import("../src/utils/objectiveStatus.ts");
 const i18nModule = await import("../src/i18n/index.ts");
 const typesModule = await import("../src/types.ts");
 const managerModule = await import("../src/manager/OKRManager.ts");
+const fileParserModule = await import("../src/manager/FileParser.ts");
 let fileTreeModule;
 let previewRefreshModule;
 let workspaceCompatModule;
@@ -43,6 +44,7 @@ const { createI18n, detectLocale, resolveLocale } =
 	i18nModule.default ?? i18nModule;
 const { DEFAULT_SETTINGS } = typesModule.default ?? typesModule;
 const { OKRManager } = managerModule.default ?? managerModule;
+const { FileParser } = fileParserModule.default ?? fileParserModule;
 const { collectMarkdownFilesFromTree } =
 	fileTreeModule.default ?? fileTreeModule;
 const { shouldRefreshActivePreview } =
@@ -407,4 +409,210 @@ test("recordCheckIn preserves the exact current value entered by the user", asyn
 	});
 
 	assert.equal(writtenObjective.keyResults[0].current, 2.5);
+});
+
+test("buildObjectiveFrontmatter stores KR current state without check-in history", () => {
+	const parser = new FileParser({});
+	const frontmatter = parser.buildObjectiveFrontmatter({
+		id: "O1",
+		period: "2026-Q2",
+		periodType: "quarter",
+		title: "Improve quality",
+		description: "",
+		owner: "Team",
+		status: "active",
+		progress: 40,
+		created: "2026-04-01",
+		due: "2026-06-30",
+		filePath: "OKR/2026-Q2/O1.md",
+		keyResults: [
+			{
+				id: "O1-KR1",
+				objectiveId: "O1",
+				period: "2026-Q2",
+				periodType: "quarter",
+				order: 0,
+				title: "Raise review coverage",
+				description: "",
+				owner: "Team",
+				unit: "number",
+				current: 4,
+				target: 10,
+				progress: 40,
+				status: "active",
+				confidence: "medium",
+				created: "2026-04-01",
+				due: "2026-06-30",
+				filePath: "OKR/2026-Q2/O1.md",
+				checkIns: [
+					{
+						id: "O1-KR1-1",
+						krId: "O1-KR1",
+						date: "2026-05-01",
+						progress: 40,
+						delta: 40,
+						note: "First update",
+						blocker: "",
+						recordedAt: "2026-05-01T00:00:00.000Z",
+					},
+				],
+			},
+		],
+	});
+
+	assert.equal(frontmatter["key-results"][0].checkIns, undefined);
+	assert.equal(frontmatter["key-results"][0].current, 4);
+	assert.equal(frontmatter["key-results"][0].target, 10);
+	assert.equal(frontmatter["key-results"][0].order, 0);
+});
+
+test("parseObjective reads check-in history from markdown progress records", () => {
+	const parser = new FileParser({});
+	const objective = parser.parseObjective(
+		{ path: "OKR/2026-Q2/O1.md" },
+		{
+			"okr-id": "O1",
+			"okr-period": "2026-Q2",
+			"okr-period-type": "quarter",
+			title: "Improve quality",
+			owner: "Team",
+			status: "active",
+			progress: 40,
+			created: "2026-04-01",
+			due: "2026-06-30",
+			"key-results": [
+				{
+					"okr-id": "O1-KR1",
+					title: "Raise review coverage",
+					owner: "Team",
+					unit: "number",
+					current: 4,
+					target: 10,
+					progress: 40,
+					status: "active",
+					confidence: "medium",
+					created: "2026-04-01",
+					due: "2026-06-30",
+					order: 0,
+				},
+			],
+		},
+		[
+			"## 背景",
+			"",
+			"## 进度记录",
+			"",
+			"<!-- OKR-CHECKINS-START -->",
+			"### O1-KR1 进度记录",
+			"",
+			"- **2026-05-01** 40% (+40) `O1-KR1-1`",
+			"  - recordedAt: 2026-05-01T00:00:00.000Z",
+			"  - note: First update",
+			"  - blocker: None",
+			"<!-- OKR-CHECKINS-END -->",
+		].join("\n"),
+	);
+
+	assert.deepEqual(objective.keyResults[0].checkIns, [
+		{
+			id: "O1-KR1-1",
+			krId: "O1-KR1",
+			date: "2026-05-01",
+			progress: 40,
+			delta: 40,
+			note: "First update",
+			blocker: "None",
+			recordedAt: "2026-05-01T00:00:00.000Z",
+		},
+	]);
+});
+
+test("syncCheckInsMarkdown replaces legacy-free body with readable progress records", () => {
+	const parser = new FileParser({});
+	const body = parser.syncCheckInsMarkdown("## 背景\n\nShip it.\n", {
+		id: "O1",
+		period: "2026-Q2",
+		periodType: "quarter",
+		title: "Improve quality",
+		description: "",
+		owner: "Team",
+		status: "active",
+		progress: 40,
+		created: "2026-04-01",
+		due: "2026-06-30",
+		filePath: "OKR/2026-Q2/O1.md",
+		keyResults: [
+			{
+				id: "O1-KR1",
+				objectiveId: "O1",
+				period: "2026-Q2",
+				periodType: "quarter",
+				order: 0,
+				title: "Raise review coverage",
+				description: "",
+				owner: "Team",
+				unit: "number",
+				current: 4,
+				target: 10,
+				progress: 40,
+				status: "active",
+				confidence: "medium",
+				created: "2026-04-01",
+				due: "2026-06-30",
+				filePath: "OKR/2026-Q2/O1.md",
+				checkIns: [
+					{
+						id: "O1-KR1-1",
+						krId: "O1-KR1",
+						date: "2026-05-01",
+						progress: 40,
+						delta: 40,
+						note: "First update",
+						blocker: "",
+						recordedAt: "2026-05-01T00:00:00.000Z",
+					},
+				],
+			},
+		],
+	});
+
+	assert.match(body, /## 进度记录/);
+	assert.match(body, /### O1-KR1 进度记录/);
+	assert.match(body, /- \*\*2026-05-01\*\* 40% \(\+40\) `O1-KR1-1`/);
+	assert.match(body, /[ ]{2}- note: First update/);
+	assert.doesNotMatch(body, /checkIns:/);
+});
+
+test("syncCheckInsMarkdown replaces an existing CRLF progress section", () => {
+	const parser = new FileParser({});
+	const existingBody = [
+		"## 背景",
+		"",
+		"Ship it.",
+		"",
+		"## 进度记录",
+		"",
+		"<!-- OKR-CHECKINS-START -->",
+		"旧内容",
+		"<!-- OKR-CHECKINS-END -->",
+		"",
+	].join("\r\n");
+	const body = parser.syncCheckInsMarkdown(existingBody, {
+		id: "O1",
+		period: "2026-Q2",
+		periodType: "quarter",
+		title: "Improve quality",
+		description: "",
+		owner: "Team",
+		status: "active",
+		progress: 0,
+		created: "2026-04-01",
+		due: "2026-06-30",
+		filePath: "OKR/2026-Q2/O1.md",
+		keyResults: [],
+	});
+
+	assert.equal(body.match(/OKR-CHECKINS-START/g).length, 1);
+	assert.doesNotMatch(body, /旧内容/);
+	assert.match(body, /暂无进度记录。/);
 });

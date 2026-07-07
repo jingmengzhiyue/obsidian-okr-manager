@@ -621,7 +621,8 @@ export class OKRManager {
 			return;
 		}
 
-		const objective = this.parser.parseObjective(file, frontmatter);
+		const content = await this.app.vault.read(file);
+		const objective = this.parser.parseObjective(file, frontmatter, content);
 		await this.writeObjective(file, { ...objective, status });
 		this.cache.delete(objective.period);
 	}
@@ -691,8 +692,9 @@ export class OKRManager {
 						return null;
 					}
 
+					const content = await this.app.vault.read(file);
 					const objective = this.normalizeObjective(
-						this.parser.parseObjective(file, frontmatter),
+						this.parser.parseObjective(file, frontmatter, content),
 					);
 					return objective;
 				} catch {
@@ -823,7 +825,10 @@ export class OKRManager {
 			...this.parser.buildObjectiveFrontmatter(objective),
 			[FRONTMATTER_TAGS]: ["okr", "objective"],
 		};
-		await this.parser.writeFrontmatter(file, frontmatter);
+		await this.app.vault.process(file, (content) => {
+			const body = this.parser.syncCheckInsMarkdown(content, objective);
+			return `---\n${stringifyYaml(frontmatter).trim()}\n---\n\n${body.trimStart()}`;
+		});
 	}
 
 	private getObjectiveFiles(period: string): TFile[] {
@@ -952,7 +957,9 @@ export class OKRManager {
 			[FRONTMATTER_TAGS]: ["okr", "objective"],
 		};
 
-		return `---\n${stringifyYaml(frontmatter).trim()}\n---\n\n## ${this.t("template.backgroundHeading")}\n\n${objective.description || this.t("template.backgroundPlaceholder")}\n\n## ${this.t("template.keyResultsHeading")}\n\n${OKR_KR_LIST_START}\n${this.t("template.autoRenderKrList")}\n${OKR_KR_LIST_END}\n`;
+		const body = `## ${this.t("template.backgroundHeading")}\n\n${objective.description || this.t("template.backgroundPlaceholder")}\n\n## ${this.t("template.keyResultsHeading")}\n\n${OKR_KR_LIST_START}\n${this.t("template.autoRenderKrList")}\n${OKR_KR_LIST_END}\n`;
+
+		return `---\n${stringifyYaml(frontmatter).trim()}\n---\n\n${this.parser.syncCheckInsMarkdown(body, objective)}`;
 	}
 
 	private t(key: string, values?: Record<string, TranslationValue>): string {

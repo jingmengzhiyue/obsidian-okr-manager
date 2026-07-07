@@ -26,12 +26,15 @@ import {
 	FRONTMATTER_UNIT,
 	KEY_RESULT_ID_PATTERN,
 	MONTH_PERIOD_PATTERN,
+	OKR_CHECKINS_END,
+	OKR_CHECKINS_START,
 	OBJECTIVE_ID_PATTERN,
 	QUARTER_PERIOD_PATTERN,
 	WEEK_PERIOD_PATTERN,
 	YEAR_PERIOD_PATTERN,
 } from "../constants";
 import { formatLocalDate } from "../utils/date";
+import { CheckIn } from "../types";
 
 export class FileParser {
 	constructor(private app: App) {}
@@ -69,13 +72,18 @@ export class FileParser {
 		});
 	}
 
-	parseObjective(file: TFile, fm: Record<string, unknown>): Objective {
+	parseObjective(
+		file: TFile,
+		fm: Record<string, unknown>,
+		content = "",
+	): Objective {
 		const id = this.parseObjectiveId(fm[FRONTMATTER_OKR_ID]);
 		const period = this.parseString(fm[FRONTMATTER_OKR_PERIOD]);
 		const periodType = this.parsePeriodType(
 			fm[FRONTMATTER_OKR_PERIOD_TYPE],
 			period,
 		);
+		const checkInsByKrId = this.parseMarkdownCheckIns(content);
 
 		return {
 			id,
@@ -96,8 +104,24 @@ export class FileParser {
 				period,
 				periodType,
 				filePath: file.path,
+				checkInsByKrId,
 			}),
 		};
+	}
+
+	syncCheckInsMarkdown(content: string, objective: Objective): string {
+		const body = this.stripFrontmatter(content).trimEnd();
+		const section = this.buildCheckInsMarkdown(objective);
+		const sectionPattern = new RegExp(
+			`(?:\\r?\\n)*## 进度记录(?:\\r?\\n){2}${this.escapeRegExp(OKR_CHECKINS_START)}[\\s\\S]*?${this.escapeRegExp(OKR_CHECKINS_END)}(?:\\r?\\n)*`,
+			"m",
+		);
+
+		if (sectionPattern.test(body)) {
+			return body.replace(sectionPattern, `\n\n${section}\n`);
+		}
+
+		return `${body}\n\n${section}\n`;
 	}
 
 	generateObjectiveFileName(id: string): string {
@@ -315,6 +339,7 @@ export class FileParser {
 			period: string;
 			periodType: OKRPeriodType;
 			filePath: string;
+			checkInsByKrId: Map<string, CheckIn[]>;
 		},
 	): KeyResult[] {
 		if (!Array.isArray(value)) {
@@ -396,6 +421,7 @@ export class FileParser {
 			period: string;
 			periodType: OKRPeriodType;
 			filePath: string;
+			checkInsByKrId: Map<string, CheckIn[]>;
 		},
 		index: number,
 	): KeyResult | null {
@@ -439,7 +465,10 @@ export class FileParser {
 			created: this.parseString(record[FRONTMATTER_CREATED]),
 			due: this.parseString(record[FRONTMATTER_DUE]),
 			filePath: context.filePath,
-			checkIns: this.parseCheckIns(record.checkIns, id, context.filePath),
+			checkIns: this.mergeCheckIns(
+				context.checkInsByKrId.get(id) ?? [],
+				this.parseCheckIns(record.checkIns, id),
+			),
 		};
 	}
 
@@ -458,22 +487,12 @@ export class FileParser {
 			[FRONTMATTER_CREATED]: keyResult.created,
 			[FRONTMATTER_DUE]: keyResult.due,
 			order: keyResult.order,
-			checkIns: keyResult.checkIns.map((checkIn) => ({
-				id: checkIn.id,
-				date: checkIn.date,
-				progress: this.clampProgress(checkIn.progress),
-				delta: checkIn.delta,
-				note: checkIn.note,
-				blocker: checkIn.blocker,
-				recordedAt: checkIn.recordedAt,
-			})),
 		};
 	}
 
 	private parseCheckIns(
 		value: unknown,
 		krId: string,
-		filePath: string,
 	): KeyResult["checkIns"] {
 		if (!Array.isArray(value)) {
 			return [];
@@ -504,5 +523,165 @@ export class FileParser {
 			.sort((left, right) =>
 				right.recordedAt.localeCompare(left.recordedAt),
 			);
+	}
+
+	private parseMarkdownCheckIns(content: string): Map<string, CheckIn[]> {
+		const result = new Map<string, CheckIn[]>();
+		const match = content.match(
+			new RegExp(
+				`${this.escapeRegExp(OKR_CHECKINS_START)}([\\s\\S]*?)${this.escapeRegExp(OKR_CHECKINS_END)}`,
+				"m",
+			),
+		);
+		if (!match?.[1]) {
+			return result;
+		}
+
+		let currentKrId = "";
+		let current: CheckIn | null = null;
+		for (const line of match[1].split(/\r?\n/)) {
+			const heading = line.match(/^###\s+(O\d+-KR\d+)\s+进度记录\s*$/);
+			if (heading?.[1]) {
+				currentKrId = heading[1];
+				current = null;
+				continue;
+			}
+
+			const entry = line.match(
+				/^- \*\*(\d{4}-\d{2}-\d{2})\*\*\s+(\d+)%\s+\(([+-]?\d+)\)\s+`([^`]+)`\s*$/,
+			);
+			if (entry && currentKrId) {
+				current = {
+					id: entry[4] ?? `${currentKrId}-${result.size + 1}`,
+					krId: currentKrId,
+					date: entry[1] ?? "",
+					progress: this.clampProgress(
+						this.parseNumber(entry[2]),
+					),
+					delta: this.parseNumber(entry[3]),
+					note: "",
+					blocker: "",
+					recordedAt: `${entry[1] ?? ""}T00:00:00.000Z`,
+				};
+				this.appendCheckIn(result, current);
+				continue;
+			}
+
+			if (!current) {
+				continue;
+			}
+
+			const recordedAt = line.match(/^[ ]{2}- recordedAt:\s*(.*)$/);
+			if (recordedAt) {
+				current.recordedAt = this.decodeMarkdownValue(
+					recordedAt[1] ?? "",
+				);
+				continue;
+			}
+
+			const note = line.match(/^[ ]{2}- note:\s*(.*)$/);
+			if (note) {
+				current.note = this.decodeMarkdownValue(note[1] ?? "");
+				continue;
+			}
+
+			const blocker = line.match(/^[ ]{2}- blocker:\s*(.*)$/);
+			if (blocker) {
+				current.blocker = this.decodeMarkdownValue(blocker[1] ?? "");
+			}
+		}
+
+		for (const [krId, checkIns] of result) {
+			result.set(
+				krId,
+				checkIns.sort((left, right) =>
+					right.recordedAt.localeCompare(left.recordedAt),
+				),
+			);
+		}
+		return result;
+	}
+
+	private buildCheckInsMarkdown(objective: Objective): string {
+		const lines = ["## 进度记录", "", OKR_CHECKINS_START];
+		let hasCheckIns = false;
+		for (const keyResult of objective.keyResults) {
+			if (keyResult.checkIns.length === 0) {
+				continue;
+			}
+
+			hasCheckIns = true;
+			lines.push("", `### ${keyResult.id} 进度记录`, "");
+			for (const checkIn of [...keyResult.checkIns].sort((left, right) =>
+				right.recordedAt.localeCompare(left.recordedAt),
+			)) {
+				const delta =
+					checkIn.delta >= 0
+						? `+${checkIn.delta}`
+						: String(checkIn.delta);
+				lines.push(
+					`- **${checkIn.date}** ${this.clampProgress(checkIn.progress)}% (${delta}) \`${checkIn.id}\``,
+					`  - recordedAt: ${this.encodeMarkdownValue(checkIn.recordedAt)}`,
+					`  - note: ${this.encodeMarkdownValue(checkIn.note)}`,
+					`  - blocker: ${this.encodeMarkdownValue(checkIn.blocker)}`,
+				);
+			}
+		}
+		if (!hasCheckIns) {
+			lines.push("", "暂无进度记录。");
+		}
+		lines.push(OKR_CHECKINS_END);
+		return lines.join("\n");
+	}
+
+	private appendCheckIn(
+		checkInsByKrId: Map<string, CheckIn[]>,
+		checkIn: CheckIn,
+	): void {
+		const existing = checkInsByKrId.get(checkIn.krId) ?? [];
+		existing.push(checkIn);
+		checkInsByKrId.set(checkIn.krId, existing);
+	}
+
+	private mergeCheckIns(
+		markdownCheckIns: CheckIn[],
+		frontmatterCheckIns: CheckIn[],
+	): CheckIn[] {
+		const merged = new Map<string, CheckIn>();
+		for (const checkIn of markdownCheckIns) {
+			merged.set(checkIn.id, checkIn);
+		}
+		for (const checkIn of frontmatterCheckIns) {
+			if (!merged.has(checkIn.id)) {
+				merged.set(checkIn.id, checkIn);
+			}
+		}
+
+		return [...merged.values()].sort((left, right) =>
+			right.recordedAt.localeCompare(left.recordedAt),
+		);
+	}
+
+	private stripFrontmatter(content: string): string {
+		if (!content.startsWith("---")) {
+			return content;
+		}
+		const end = content.indexOf("\n---", 3);
+		if (end === -1) {
+			return content;
+		}
+		return content.slice(end + 4).replace(/^\r?\n/, "");
+	}
+
+	private encodeMarkdownValue(value: string): string {
+		return value.replace(/\r?\n/g, "<br>");
+	}
+
+	private decodeMarkdownValue(value: string): string {
+		return value.replace(/<br>/g, "\n").trim();
+	}
+
+	private escapeRegExp(value: string): string {
+		return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 	}
 }

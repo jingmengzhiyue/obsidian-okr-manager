@@ -6,7 +6,7 @@
 
 ![Obsidian](https://img.shields.io/badge/Obsidian-%3E%3D1.7.2-blueviolet)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Version](https://img.shields.io/badge/version-1.1.0-blue)
+![Version](https://img.shields.io/badge/version-1.2.0-blue)
 
 [English README](./README.md) · [功能特性](#功能特性) · [安装方法](#安装方法) · [快速开始](#快速开始) · [使用说明](#使用说明) · [常见问题](#常见问题)
 
@@ -23,8 +23,8 @@ Vault OKR Manager 是一个 Obsidian 社区插件，用于在你的 Vault 中管
 当前版本的核心存储模型是：
 
 - 一个 Objective 对应一个 Markdown 文件
-- 该 Objective 下的所有 KR 都保存在同一个文件里
-- 每个 KR 的进度历史也内嵌保存在同一个 Objective 文件中
+- 该 Objective 下的所有 KR 当前状态都保存在同一个文件的 YAML frontmatter 中
+- 每次进度更新会追加到正文的 `## 进度记录` 区域，方便阅读和复盘
 
 这种方式比“每个 KR 一个文件”或“每次 Check-in 一个文件”更整洁，也更符合长期维护、同步和版本管理的需要。
 
@@ -37,7 +37,7 @@ Vault OKR Manager 是一个 Obsidian 社区插件，用于在你的 Vault 中管
 
 ## 功能特性
 
-- 每个 Objective 只保留一个文件，KR 与进度历史均内嵌存储
+- 每个 Objective 只保留一个文件，KR 当前状态与进度历史均内嵌存储
 - Dashboard 统一查看各周期目标、关键结果、进度和超期状态
 - 支持周、月、季度、年四种周期
 - 自动计算 KR 与 Objective 进度
@@ -143,7 +143,7 @@ Vault OKR Manager 是一个 Obsidian 社区插件，用于在你的 Vault 中管
 4. 可选填写进展说明和阻碍因素。
 5. 保存更新。
 
-进度历史会保存在对应 KR 的内嵌 `checkIns` 数组中，因此同一天也可以多次记录，不会额外生成文件。
+进度历史会追加到 Objective 文件正文的 `## 进度记录` 区域，因此同一天也可以多次记录，不会额外生成文件。
 
 ### 5. 打开 Dashboard
 
@@ -170,7 +170,7 @@ OKR/
 - 每次 Check-in 一个独立文件
 - 专门的 `Check-ins` 目录设置项
 
-现在所有相关数据都聚合在 Objective 文件中。
+现在所有相关数据都聚合在 Objective 文件中：frontmatter 保存当前状态，正文保存可读的进度日志。
 
 ### 命令列表
 
@@ -199,13 +199,13 @@ OKR/
 每个 Objective 文件包含：
 
 - Objective 元数据
-- `key-results` 数组
-- 每个 KR 内嵌的 `checkIns` 历史
+- `key-results` 数组，用于保存 KR 当前状态
+- 正文 `## 进度记录` 区域，用于保存每次 check-in 历史
 - 插件渲染 KR 内容的保留区域
 
 示例：
 
-```yaml
+```markdown
 ---
 okr-type: objective
 okr-id: O1
@@ -223,13 +223,28 @@ key-results:
     target: 100
     progress: 80
     order: 0
-    checkIns:
-      - id: O1-KR1-1740000000000
-        date: 2026-05-18
-        progress: 80
-        delta: 10
-        note: 已提升后端模块代码评审覆盖率
 ---
+
+## 背景
+
+提升工程质量。
+
+## Key Results
+
+<!-- OKR-KR-LIST -->
+插件会在这里渲染 KR 列表。
+<!-- /OKR-KR-LIST -->
+
+## 进度记录
+
+<!-- OKR-CHECKINS-START -->
+### O1-KR1 进度记录
+
+- **2026-05-18** 80% (+10) `O1-KR1-1740000000000`
+  - recordedAt: 2026-05-18T09:00:00.000Z
+  - note: 已提升后端模块代码评审覆盖率
+  - blocker:
+<!-- OKR-CHECKINS-END -->
 ```
 
 ### 进度规则
@@ -276,7 +291,9 @@ Objective 进度：
 - 每次进度记录一个独立 Check-in 文件
 - 在设置页中配置独立的 Check-in 目录
 
-如果你过去使用过旧原型，需要手动将数据整理到当前的 Objective 聚合结构中。
+如果你过去使用过旧原型，需要手动将独立文件整理到当前的 Objective 聚合结构中。
+
+如果你已经有旧版 Objective 文件，并且进度历史还保存在 frontmatter 的 `checkIns` 数组里，1.2.0 会继续读取这些旧数据。下次通过插件记录进度、编辑 KR、调整排序或更新目标时，插件会把旧 `checkIns` 转换为正文 `## 进度记录` 区域，并从 frontmatter 中移除历史数组。
 
 ## 常见问题
 
@@ -286,7 +303,7 @@ Objective 进度：
 
 ### 现在还会创建 `Check-ins` 文件夹吗？
 
-不会。进度历史保存在 Objective 文件里每个 KR 的 `checkIns` 字段中。
+不会。进度历史保存在 Objective 文件正文的 `## 进度记录` 区域中。
 
 ### 同一天可以记录多次进度吗？
 

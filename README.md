@@ -6,7 +6,7 @@ Plan, track, and review Objectives and Key Results directly inside your Obsidian
 
 ![Obsidian](https://img.shields.io/badge/Obsidian-%3E%3D1.7.2-blueviolet)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Version](https://img.shields.io/badge/version-1.1.0-blue)
+![Version](https://img.shields.io/badge/version-1.2.0-blue)
 
 [中文文档](./README.zh-CN.md) · [Features](#features) · [Installation](#installation) · [Quick Start](#quick-start) · [Usage](#usage) · [FAQ](#faq)
 
@@ -22,9 +22,8 @@ Vault OKR Manager is an Obsidian community plugin for managing OKRs entirely ins
 
 The plugin keeps each objective in a single Markdown file and stores:
 
-- objective metadata in YAML frontmatter
-- embedded key results in the same file
-- embedded check-in history inside each key result
+- objective and key result current state in YAML frontmatter
+- readable check-in history in the `## 进度记录` Markdown section
 
 This storage model keeps your vault cleaner than one-file-per-KR or one-file-per-check-in approaches while still remaining readable, portable, and version-control friendly.
 
@@ -37,7 +36,7 @@ The plugin is local-first by design:
 
 ## Features
 
-- One file per objective with embedded key results and progress history
+- One file per objective with embedded key result state and progress history
 - Dashboard view for browsing objectives by period
 - Weekly, monthly, quarterly, and yearly planning cycles
 - Automatic progress calculation for key results and objectives
@@ -143,7 +142,7 @@ No separate key result file is created. The new key result is stored inside the 
 4. Optionally add notes and blockers.
 5. Save the update.
 
-Progress history is stored inside the related key result, so multiple updates on the same day are supported without creating extra files.
+Progress history is appended to the objective file's `## 进度记录` section, so multiple updates on the same day are supported without creating extra files.
 
 ### 5. Open the dashboard
 
@@ -170,7 +169,7 @@ The plugin no longer creates:
 - one file per check-in
 - a dedicated `Check-ins` settings path
 
-Instead, each objective file contains all related key results and their progress history.
+Instead, each objective file contains all related data: frontmatter stores the current state, and the Markdown body stores readable progress logs.
 
 ### Commands
 
@@ -199,13 +198,13 @@ If Obsidian is using Simplified Chinese, the plugin UI and command names switch 
 Each objective file stores:
 
 - objective metadata
-- a `key-results` array
-- embedded `checkIns` arrays inside each key result
+- a `key-results` array for current key result state
+- a `## 进度记录` section for check-in history
 - a reserved block for plugin-rendered key result content
 
 Example:
 
-```yaml
+```markdown
 ---
 okr-type: objective
 okr-id: O1
@@ -223,13 +222,28 @@ key-results:
     target: 100
     progress: 80
     order: 0
-    checkIns:
-      - id: O1-KR1-1740000000000
-        date: 2026-05-18
-        progress: 80
-        delta: 10
-        note: Improved review coverage for backend modules
 ---
+
+## Background
+
+Improve engineering quality.
+
+## Key Results
+
+<!-- OKR-KR-LIST -->
+The plugin renders the KR list here.
+<!-- /OKR-KR-LIST -->
+
+## 进度记录
+
+<!-- OKR-CHECKINS-START -->
+### O1-KR1 进度记录
+
+- **2026-05-18** 80% (+10) `O1-KR1-1740000000000`
+  - recordedAt: 2026-05-18T09:00:00.000Z
+  - note: Improved review coverage for backend modules
+  - blocker:
+<!-- OKR-CHECKINS-END -->
 ```
 
 ### Progress rules
@@ -276,7 +290,9 @@ This version does not support the old prototype where:
 - progress updates were stored as standalone check-in files
 - a separate check-in directory was configurable in settings
 
-If you previously used that prototype, reorganize your data into the current objective-based structure manually.
+If you previously used that prototype, reorganize standalone files into the current objective-based structure manually.
+
+If your existing objective files still store progress history in frontmatter `checkIns` arrays, version 1.2.0 continues to read that data. The next plugin write, such as recording progress, editing a key result, reordering key results, or updating an objective, converts those legacy `checkIns` entries into the Markdown progress section and removes the history arrays from frontmatter.
 
 ## FAQ
 
@@ -286,7 +302,7 @@ No. Key results are embedded inside the objective file.
 
 ### Does the plugin still create a `Check-ins` folder?
 
-No. Progress history is now stored inside the objective file under each key result.
+No. Progress history is stored in the objective file's Markdown progress section.
 
 ### Can I record progress multiple times on the same day?
 

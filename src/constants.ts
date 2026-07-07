@@ -26,6 +26,8 @@ export const FRONTMATTER_KEY_RESULTS = "key-results";
 
 export const OKR_KR_LIST_START = "<!-- OKR-KR-LIST -->";
 export const OKR_KR_LIST_END = "<!-- /OKR-KR-LIST -->";
+export const OKR_CHECKINS_START = "<!-- OKR-CHECKINS-START -->";
+export const OKR_CHECKINS_END = "<!-- OKR-CHECKINS-END -->";
 
 export const DEFAULT_ROOT_DIR = "OKR";
 export const DEFAULT_CHECKINS_DIR = "OKR/Check-ins";
