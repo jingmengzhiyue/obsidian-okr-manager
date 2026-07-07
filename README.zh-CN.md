@@ -6,7 +6,7 @@
 
 ![Obsidian](https://img.shields.io/badge/Obsidian-%3E%3D1.7.2-blueviolet)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Version](https://img.shields.io/badge/version-1.2.0-blue)
+![Version](https://img.shields.io/badge/version-1.2.1-blue)
 
 [English README](./README.md) · [功能特性](#功能特性) · [安装方法](#安装方法) · [快速开始](#快速开始) · [使用说明](#使用说明) · [常见问题](#常见问题)
 
@@ -182,6 +182,7 @@ OKR/
 | `New key result` | 给目标添加 KR |
 | `Record progress` | 记录 KR 进度更新 |
 | `Open dashboard` | 打开或聚焦 OKR Dashboard |
+| `Migrate legacy progress records` | 将旧 frontmatter 进度记录批量迁移到正文 |
 
 如果 Obsidian 当前使用简体中文，插件界面和命令名称会自动切换为中文。
 
@@ -293,7 +294,7 @@ Objective 进度：
 
 如果你过去使用过旧原型，需要手动将独立文件整理到当前的 Objective 聚合结构中。
 
-如果你已经有旧版 Objective 文件，并且进度历史还保存在 frontmatter 的 `checkIns` 数组里，1.2.0 会继续读取这些旧数据。下次通过插件记录进度、编辑 KR、调整排序或更新目标时，插件会把旧 `checkIns` 转换为正文 `## 进度记录` 区域，并从 frontmatter 中移除历史数组。
+如果你已经有旧版 Objective 文件，并且进度历史还保存在 frontmatter 的 `checkIns` 数组里，1.2.1 会继续读取这些旧数据。你可以执行 **Migrate legacy progress records** 一次性迁移当前 OKR 目录下的旧记录；也可以等下次通过插件记录进度、编辑 KR、调整排序或更新目标时，让插件自动把对应文件的旧 `checkIns` 转换为正文 `## 进度记录` 区域，并从 frontmatter 中移除历史数组。
 
 ## 常见问题
 

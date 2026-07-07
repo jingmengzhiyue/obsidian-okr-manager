@@ -1,4 +1,4 @@
-import { Plugin, TAbstractFile, TFile } from "obsidian";
+import { Notice, Plugin, TAbstractFile, TFile } from "obsidian";
 import { OKRPluginSettings, DEFAULT_SETTINGS } from "./types";
 import { OKRManager } from "./manager/OKRManager";
 import { DashboardView, DASHBOARD_VIEW_TYPE } from "./views/DashboardView";
@@ -85,6 +85,13 @@ export default class OKRPlugin extends Plugin {
 			name: this.i18n.t("actions.openDashboard"),
 			callback: () => this.activateDashboard(),
 		});
+		this.addCommand({
+			id: "okr-migrate-legacy-progress-records",
+			name: this.i18n.t("actions.migrateLegacyProgressRecords"),
+			callback: () => {
+				void this.migrateLegacyProgressRecords();
+			},
+		});
 
 		// Ribbon 图标
 		this.addRibbonIcon("target", this.i18n.t("actions.openDashboard"), () =>
@@ -127,6 +134,27 @@ export default class OKRPlugin extends Plugin {
 			if (view instanceof DashboardView) {
 				view.refresh();
 			}
+		}
+	}
+
+	async migrateLegacyProgressRecords(): Promise<void> {
+		try {
+			const result = await this.manager.migrateLegacyProgressRecords();
+			new Notice(
+				this.i18n.t("migration.legacyProgressRecordsCompleted", {
+					scanned: result.scanned,
+					migrated: result.migrated,
+				}),
+			);
+			this.refreshDashboard();
+		} catch (error) {
+			new Notice(
+				error instanceof Error
+					? this.i18n.t("migration.legacyProgressRecordsFailedWithReason", {
+							message: error.message,
+						})
+					: this.i18n.t("migration.legacyProgressRecordsFailed"),
+			);
 		}
 	}
 

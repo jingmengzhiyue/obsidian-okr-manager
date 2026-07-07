@@ -6,7 +6,7 @@ Plan, track, and review Objectives and Key Results directly inside your Obsidian
 
 ![Obsidian](https://img.shields.io/badge/Obsidian-%3E%3D1.7.2-blueviolet)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Version](https://img.shields.io/badge/version-1.2.0-blue)
+![Version](https://img.shields.io/badge/version-1.2.1-blue)
 
 [中文文档](./README.zh-CN.md) · [Features](#features) · [Installation](#installation) · [Quick Start](#quick-start) · [Usage](#usage) · [FAQ](#faq)
 
@@ -181,6 +181,7 @@ Command labels follow the active plugin language. In English, the commands are:
 | `New key result`  | Add a key result to an objective          |
 | `Record progress` | Record a progress update for a key result |
 | `Open dashboard`  | Open or focus the OKR dashboard           |
+| `Migrate legacy progress records` | Batch migrate old frontmatter progress records into Markdown |
 
 If Obsidian is using Simplified Chinese, the plugin UI and command names switch to Chinese automatically.
 
@@ -292,7 +293,7 @@ This version does not support the old prototype where:
 
 If you previously used that prototype, reorganize standalone files into the current objective-based structure manually.
 
-If your existing objective files still store progress history in frontmatter `checkIns` arrays, version 1.2.0 continues to read that data. The next plugin write, such as recording progress, editing a key result, reordering key results, or updating an objective, converts those legacy `checkIns` entries into the Markdown progress section and removes the history arrays from frontmatter.
+If your existing objective files still store progress history in frontmatter `checkIns` arrays, version 1.2.1 continues to read that data. Run **Migrate legacy progress records** to migrate old records across the current OKR directory in one pass. You can also let the next plugin write, such as recording progress, editing a key result, reordering key results, or updating an objective, convert that file's legacy `checkIns` entries into the Markdown progress section and remove the history arrays from frontmatter.
 
 ## FAQ
 

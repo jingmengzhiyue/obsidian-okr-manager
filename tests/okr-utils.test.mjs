@@ -411,6 +411,175 @@ test("recordCheckIn preserves the exact current value entered by the user", asyn
 	assert.equal(writtenObjective.keyResults[0].current, 2.5);
 });
 
+test("reorderKeyResult preserves check-in history on the moved key result", async () => {
+	const manager = new OKRManager({}, DEFAULT_SETTINGS, createI18n("en"));
+	let writtenObjective;
+	manager.findObjectiveEntryByKRId = async () => ({
+		file: { path: "OKR/2026-Q2/O1.md" },
+		objective: {
+			id: "O1",
+			period: "2026-Q2",
+			periodType: "quarter",
+			title: "Q2 objective",
+			description: "",
+			owner: "Team",
+			status: "active",
+			progress: 50,
+			created: "2026-04-01",
+			due: "2026-06-30",
+			filePath: "OKR/2026-Q2/O1.md",
+			keyResults: [
+				{
+					id: "O1-KR1",
+					objectiveId: "O1",
+					period: "2026-Q2",
+					periodType: "quarter",
+					order: 0,
+					title: "First KR",
+					description: "",
+					owner: "Team",
+					unit: "number",
+					current: 5,
+					target: 10,
+					progress: 50,
+					status: "active",
+					confidence: "medium",
+					created: "2026-04-01",
+					due: "2026-06-30",
+					filePath: "OKR/2026-Q2/O1.md",
+					checkIns: [
+						{
+							id: "O1-KR1-1",
+							krId: "O1-KR1",
+							date: "2026-05-01",
+							progress: 50,
+							delta: 50,
+							note: "Keep this history",
+							blocker: "",
+							recordedAt: "2026-05-01T00:00:00.000Z",
+						},
+					],
+				},
+				{
+					id: "O1-KR2",
+					objectiveId: "O1",
+					period: "2026-Q2",
+					periodType: "quarter",
+					order: 1,
+					title: "Second KR",
+					description: "",
+					owner: "Team",
+					unit: "number",
+					current: 0,
+					target: 10,
+					progress: 0,
+					status: "active",
+					confidence: "medium",
+					created: "2026-04-01",
+					due: "2026-06-30",
+					filePath: "OKR/2026-Q2/O1.md",
+					checkIns: [],
+				},
+			],
+		},
+	});
+	manager.writeObjective = async (_file, objective) => {
+		writtenObjective = objective;
+	};
+
+	await manager.reorderKeyResult("O1-KR1", "2026-Q2", 1);
+
+	assert.deepEqual(
+		writtenObjective.keyResults.map((item) => item.id),
+		["O1-KR2", "O1-KR1"],
+	);
+	assert.deepEqual(writtenObjective.keyResults[1].checkIns, [
+		{
+			id: "O1-KR1-1",
+			krId: "O1-KR1",
+			date: "2026-05-01",
+			progress: 50,
+			delta: 50,
+			note: "Keep this history",
+			blocker: "",
+			recordedAt: "2026-05-01T00:00:00.000Z",
+		},
+	]);
+});
+
+test("migrateLegacyProgressRecords rewrites objective files with legacy frontmatter check-ins", async () => {
+	const file = { path: "OKR/2026-Q2/O1.md" };
+	const manager = new OKRManager(
+		{
+			vault: {
+				async read() {
+					return [
+						"---",
+						"okr-type: objective",
+						"---",
+						"",
+						"## 背景",
+						"",
+						"Legacy objective.",
+					].join("\n");
+				},
+			},
+		},
+		DEFAULT_SETTINGS,
+		createI18n("en"),
+	);
+	manager.getAllPeriods = async () => ["2026-Q2"];
+	manager.getObjectiveFiles = () => [file];
+	manager.parser.readFrontmatter = async () => ({
+		"okr-type": "objective",
+		"okr-id": "O1",
+		"okr-period": "2026-Q2",
+		"okr-period-type": "quarter",
+		title: "Improve quality",
+		owner: "Team",
+		status: "active",
+		progress: 40,
+		created: "2026-04-01",
+		due: "2026-06-30",
+		"key-results": [
+			{
+				"okr-id": "O1-KR1",
+				title: "Raise review coverage",
+				owner: "Team",
+				unit: "number",
+				current: 4,
+				target: 10,
+				progress: 40,
+				status: "active",
+				confidence: "medium",
+				created: "2026-04-01",
+				due: "2026-06-30",
+				order: 0,
+				checkIns: [
+					{
+						id: "O1-KR1-1",
+						date: "2026-05-01",
+						progress: 40,
+						delta: 40,
+						note: "Legacy update",
+						blocker: "",
+						recordedAt: "2026-05-01T00:00:00.000Z",
+					},
+				],
+			},
+		],
+	});
+	let writtenObjective;
+	manager.writeObjective = async (_file, objective) => {
+		writtenObjective = objective;
+	};
+
+	const result = await manager.migrateLegacyProgressRecords();
+
+	assert.deepEqual(result, { scanned: 1, migrated: 1 });
+	assert.equal(writtenObjective.keyResults[0].checkIns[0].note, "Legacy update");
+});
+
 test("buildObjectiveFrontmatter stores KR current state without check-in history", () => {
 	const parser = new FileParser({});
 	const frontmatter = parser.buildObjectiveFrontmatter({

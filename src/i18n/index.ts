@@ -28,6 +28,8 @@ const messages: Record<SupportedLocale, Record<string, string>> = {
 		"actions.moreActions": "More actions",
 		"actions.moveDown": "Move down",
 		"actions.moveUp": "Move up",
+		"actions.migrateLegacyProgressRecords":
+			"Migrate legacy progress records",
 		"actions.newKeyResult": "New key result",
 		"actions.newObjective": "New objective",
 		"actions.openDashboard": "Open dashboard",
@@ -141,6 +143,12 @@ const messages: Record<SupportedLocale, Record<string, string>> = {
 			"Current value must be a number greater than or equal to 0",
 		"modals.input.targetError":
 			"Target value must be a number greater than or equal to 0",
+		"migration.legacyProgressRecordsCompleted":
+			"Progress record migration complete: scanned {scanned}, migrated {migrated}.",
+		"migration.legacyProgressRecordsFailed":
+			"Failed to migrate legacy progress records",
+		"migration.legacyProgressRecordsFailedWithReason":
+			"Failed to migrate legacy progress records: {message}",
 		"modals.newKeyResult.createFailed": "Failed to create key result",
 		"modals.newKeyResult.createFailedWithReason":
 			"Failed to create key result: {message}",
@@ -237,6 +245,7 @@ const messages: Record<SupportedLocale, Record<string, string>> = {
 		"actions.moreActions": "更多操作",
 		"actions.moveDown": "下移",
 		"actions.moveUp": "上移",
+		"actions.migrateLegacyProgressRecords": "迁移旧版进度记录",
 		"actions.newKeyResult": "新建关键结果",
 		"actions.newObjective": "新建目标",
 		"actions.openDashboard": "打开仪表盘",
@@ -340,6 +349,11 @@ const messages: Record<SupportedLocale, Record<string, string>> = {
 		"modals.fields.unit": "进度单位",
 		"modals.input.currentError": "当前值必须是大于等于 0 的数字",
 		"modals.input.targetError": "目标值必须是大于等于 0 的数字",
+		"migration.legacyProgressRecordsCompleted":
+			"旧版进度记录迁移完成：扫描 {scanned} 个，迁移 {migrated} 个。",
+		"migration.legacyProgressRecordsFailed": "迁移旧版进度记录失败",
+		"migration.legacyProgressRecordsFailedWithReason":
+			"迁移旧版进度记录失败：{message}",
 		"modals.newKeyResult.createFailed": "创建 Key Result 失败",
 		"modals.newKeyResult.createFailedWithReason":
 			"创建 Key Result 失败：{message}",

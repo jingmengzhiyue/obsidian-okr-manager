@@ -678,6 +678,38 @@ export class OKRManager {
 		this.cache.delete(updatedObjective.period);
 	}
 
+	async migrateLegacyProgressRecords(): Promise<{
+		scanned: number;
+		migrated: number;
+	}> {
+		let scanned = 0;
+		let migrated = 0;
+		const periods = await this.getAllPeriods();
+		for (const period of periods) {
+			for (const file of this.getObjectiveFiles(period)) {
+				const frontmatter = await this.parser.readFrontmatter(file);
+				if (frontmatter[FRONTMATTER_OKR_TYPE] !== OKR_TYPE_OBJECTIVE) {
+					continue;
+				}
+
+				scanned += 1;
+				if (!this.hasLegacyCheckIns(frontmatter)) {
+					continue;
+				}
+
+				const content = await this.app.vault.read(file);
+				const objective = this.normalizeObjective(
+					this.parser.parseObjective(file, frontmatter, content),
+				);
+				await this.writeObjective(file, objective);
+				migrated += 1;
+			}
+			this.cache.delete(period);
+		}
+
+		return { scanned, migrated };
+	}
+
 	private async loadObjectivesForPeriod(
 		period: string,
 	): Promise<Objective[]> {
@@ -948,6 +980,21 @@ export class OKRManager {
 		if (this.app.vault.getAbstractFileByPath(path)) {
 			throw new Error(message);
 		}
+	}
+
+	private hasLegacyCheckIns(frontmatter: Record<string, unknown>): boolean {
+		const keyResults = frontmatter["key-results"];
+		if (!Array.isArray(keyResults)) {
+			return false;
+		}
+
+		return keyResults.some((item) => {
+			if (!item || typeof item !== "object") {
+				return false;
+			}
+
+			return "checkIns" in item;
+		});
 	}
 
 	private buildObjectiveContent(objective: Objective): string {

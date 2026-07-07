@@ -1,6 +1,6 @@
 {
 	"name": "vault-okr-manager",
-	"version": "1.2.0",
+	"version": "1.2.1",
 	"description": "Manage OKRs inside your vault with a streamlined dashboard and built-in check-ins.",
 	"main": "main.js",
 	"type": "module",
