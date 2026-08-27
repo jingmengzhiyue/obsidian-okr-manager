@@ -6,7 +6,7 @@ Plan, track, and review Objectives and Key Results directly inside your Obsidian
 
 ![Obsidian](https://img.shields.io/badge/Obsidian-%3E%3D1.7.2-blueviolet)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Version](https://img.shields.io/badge/version-1.2.1-blue)
+![Version](https://img.shields.io/badge/version-1.2.2-blue)
 
 [中文文档](./README.zh-CN.md) · [Features](#features) · [Installation](#installation) · [Quick Start](#quick-start) · [Usage](#usage) · [FAQ](#faq)
 
@@ -143,6 +143,10 @@ No separate key result file is created. The new key result is stored inside the 
 5. Save the update.
 
 Progress history is appended to the objective file's `## 进度记录` section, so multiple updates on the same day are supported without creating extra files.
+
+With automatic calculation enabled, editing the current value calculates progress from `current / target`. Editing the percentage last preserves that percentage and derives an exact, non-rounded current value. With automatic calculation disabled, the current value and percentage are stored independently.
+
+Boolean key results use discrete values: the current value must be `0` or `1`, the target must be `1`, and check-in progress must be `0%` or `100%`.
 
 ### 5. Open the dashboard
 
@@ -293,7 +297,7 @@ This version does not support the old prototype where:
 
 If you previously used that prototype, reorganize standalone files into the current objective-based structure manually.
 
-If your existing objective files still store progress history in frontmatter `checkIns` arrays, version 1.2.1 continues to read that data. Run **Migrate legacy progress records** to migrate old records across the current OKR directory in one pass. You can also let the next plugin write, such as recording progress, editing a key result, reordering key results, or updating an objective, convert that file's legacy `checkIns` entries into the Markdown progress section and remove the history arrays from frontmatter.
+If your existing objective files still store progress history in frontmatter `checkIns` arrays, version 1.2.2 continues to read that data. Run **Migrate legacy progress records** to migrate old records across the current OKR directory in one pass. You can also let the next plugin write, such as recording progress, editing a key result, reordering key results, or updating an objective, convert that file's legacy `checkIns` entries into the Markdown progress section and remove the history arrays from frontmatter.
 
 ## FAQ
 
@@ -334,7 +338,8 @@ The following backlog is based on a review of the current implementation, with p
 - [x] Refresh the current Markdown preview immediately after inline actions such as check-in, edit, delete, add key result, and postpone due date
 - [x] Reduce duplicate dashboard refreshes triggered by both modal callbacks and vault metadata events
 - [x] Replace full-vault objective discovery with directory-scoped lookup under the configured OKR root
-- [ ] Add a fast key-result-to-objective index to avoid cross-period scans during progress recording and lookup
+- [x] Add frontmatter summary caching for the dashboard, detail view, and progress picker so they do not read complete progress-history bodies
+- [ ] Add a fast key-result-to-objective index to avoid cross-period scans in APIs that do not receive a period
 
 ### P1: Core OKR workflow completeness
 

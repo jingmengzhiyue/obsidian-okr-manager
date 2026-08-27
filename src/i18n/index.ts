@@ -98,6 +98,13 @@ const messages: Record<SupportedLocale, Record<string, string>> = {
 		"errors.keyResultNotFound": "Key result not found: {id}",
 		"errors.keyResultToDeleteNotFound":
 			"Could not find the key result to delete: {id}",
+		"errors.invalidObjectiveFiles": "Invalid Objective files: {files}",
+		"errors.duplicateObjectiveId": "Duplicate Objective ID {id}: {files}",
+		"errors.objectivePeriodMismatch":
+			"Objective period {actual} does not match folder period {expected}",
+		"errors.invalidKeyResultValues": "Invalid key result values",
+		"errors.invalidCheckInValues": "Invalid check-in values",
+		"errors.invalidPeriod": "Invalid OKR period: {period}",
 		"errors.objectiveExists": "Objective file already exists: {fileName}",
 		"errors.objectiveNotFound": "Objective not found: {id}",
 		"errors.objectiveToDeleteNotFound":
@@ -309,6 +316,13 @@ const messages: Record<SupportedLocale, Record<string, string>> = {
 		"errors.unknown": "未知错误",
 		"errors.keyResultNotFound": "找不到关键结果：{id}",
 		"errors.keyResultToDeleteNotFound": "找不到要删除的关键结果：{id}",
+		"errors.invalidObjectiveFiles": "目标文件无效：{files}",
+		"errors.duplicateObjectiveId": "Objective ID {id} 重复：{files}",
+		"errors.objectivePeriodMismatch":
+			"Objective 周期 {actual} 与所在文件夹周期 {expected} 不一致",
+		"errors.invalidKeyResultValues": "关键结果数值无效",
+		"errors.invalidCheckInValues": "进度记录数值无效",
+		"errors.invalidPeriod": "OKR 周期无效：{period}",
 		"errors.objectiveExists": "Objective 文件已存在：{fileName}",
 		"errors.objectiveNotFound": "找不到 Objective：{id}",
 		"errors.objectiveToDeleteNotFound": "找不到要删除的目标：{id}",

@@ -4,6 +4,7 @@ import { OKRManager } from "../manager/OKRManager";
 import { Confidence } from "../types";
 import { getTodayLocalDate } from "../utils/date";
 import { getElementDocument, isActiveElement } from "../utils/document";
+import { isValidKeyResultValues } from "../utils/validation";
 
 interface NewKRModalOptions {
 	initialPeriod?: string;
@@ -24,7 +25,7 @@ export class NewKRModal extends Modal {
 	private description: string = "";
 	private objectives: { id: string; title: string }[] = [];
 	private isSubmitting = false;
-	private validate!: () => void;
+	private validate!: () => boolean;
 
 	constructor(
 		app: App,
@@ -49,7 +50,12 @@ export class NewKRModal extends Modal {
 				.getCurrentPeriod(this.manager.getSettings().defaultPeriodType);
 		this.due = today;
 
-		await this.loadObjectives();
+		try {
+			await this.loadObjectives();
+		} catch (error) {
+			this.objectives = [];
+			this.showLoadError(error);
+		}
 		if (
 			this.options.initialObjectiveId &&
 			this.objectives.some(
@@ -149,6 +155,7 @@ export class NewKRModal extends Modal {
 		unitSelect.value = this.unit;
 		unitSelect.addEventListener("change", () => {
 			this.unit = unitSelect.value as typeof this.unit;
+			this.validate();
 		});
 
 		const currentField = contentEl.createDiv("okr-field");
@@ -169,7 +176,10 @@ export class NewKRModal extends Modal {
 		});
 		currentInput.addEventListener("input", () => {
 			const value = Number(currentInput.value);
-			const valid = Number.isFinite(value) && value >= 0;
+			const valid =
+				Number.isFinite(value) &&
+				value >= 0 &&
+				(this.unit !== "boolean" || value === 0 || value === 1);
 			this.current = valid ? value : 0;
 			currentInput.toggleClass(
 				"okr-invalid",
@@ -200,7 +210,10 @@ export class NewKRModal extends Modal {
 		});
 		targetInput.addEventListener("input", () => {
 			const value = Number(targetInput.value);
-			const valid = Number.isFinite(value) && value >= 0;
+			const valid =
+				Number.isFinite(value) &&
+				value > 0 &&
+				(this.unit !== "boolean" || value === 1);
 			this.target = valid ? value : 0;
 			targetInput.toggleClass(
 				"okr-invalid",
@@ -278,6 +291,11 @@ export class NewKRModal extends Modal {
 		});
 
 		this.validate = () => {
+			const numericValuesValid = isValidKeyResultValues(
+				this.unit,
+				this.current,
+				this.target,
+			);
 			const valid =
 				!this.isSubmitting &&
 				this.period.length > 0 &&
@@ -286,9 +304,11 @@ export class NewKRModal extends Modal {
 				this.owner.length > 0 &&
 				this.due.length > 0 &&
 				targetInput.value.length > 0 &&
+				numericValuesValid &&
 				!targetInput.hasClass("okr-invalid") &&
 				!currentInput.hasClass("okr-invalid");
 			confirmBtn.disabled = !valid;
+			return valid;
 		};
 		this.validate();
 
@@ -306,8 +326,7 @@ export class NewKRModal extends Modal {
 	}
 
 	private async submit(): Promise<void> {
-		this.validate();
-		if (this.isSubmitting || !this.objectiveId || !this.title) {
+		if (this.isSubmitting || !this.validate()) {
 			return;
 		}
 
@@ -361,7 +380,7 @@ export class NewKRModal extends Modal {
 	}
 
 	private async loadObjectives(): Promise<void> {
-		const objectives = await this.manager.getObjectives(this.period);
+		const objectives = await this.manager.getObjectiveSummaries(this.period);
 		this.objectives = objectives.map((objective) => ({
 			id: objective.id,
 			title: `${objective.id} ${objective.title}`,
@@ -373,7 +392,12 @@ export class NewKRModal extends Modal {
 		select: HTMLSelectElement,
 	): Promise<void> {
 		this.period = period;
-		await this.loadObjectives();
+		try {
+			await this.loadObjectives();
+		} catch (error) {
+			this.objectives = [];
+			this.showLoadError(error);
+		}
 		this.objectiveId = this.objectives[0]?.id ?? "";
 		this.renderObjectiveOptions(select);
 		this.validate();
@@ -404,6 +428,15 @@ export class NewKRModal extends Modal {
 		const label = container.createEl("label", { cls: "okr-label" });
 		label.appendText(text);
 		label.createEl("span", { cls: "okr-required", text: "*" });
+	}
+
+	private showLoadError(error: unknown): void {
+		new Notice(
+			this.t("dashboard.loadFailedWithReason", {
+				message:
+					error instanceof Error ? error.message : this.t("errors.unknown"),
+			}),
+		);
 	}
 
 	private t(

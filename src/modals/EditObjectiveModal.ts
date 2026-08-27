@@ -297,12 +297,23 @@ export class EditObjectiveModal extends Modal {
 	}
 
 	private async refreshKeyResults(): Promise<void> {
-		const refreshed = await this.manager.getKeyResults(
-			this.objective.id,
-			this.objective.period,
-		);
-		this.keyResults = refreshed;
-		this.renderKeyResults();
+		try {
+			const refreshed = await this.manager.getKeyResultSummaries(
+				this.objective.id,
+				this.objective.period,
+			);
+			this.keyResults = refreshed;
+			this.renderKeyResults();
+		} catch (error) {
+			new Notice(
+				this.t("dashboard.loadFailedWithReason", {
+					message:
+						error instanceof Error
+							? error.message
+							: this.t("errors.unknown"),
+				}),
+			);
+		}
 	}
 
 	private t(

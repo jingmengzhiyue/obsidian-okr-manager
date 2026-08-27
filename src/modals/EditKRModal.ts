@@ -2,6 +2,7 @@ import { App, Modal, Notice } from "obsidian";
 import { type TranslationValue } from "../i18n";
 import { OKRManager } from "../manager/OKRManager";
 import { Confidence, KeyResult } from "../types";
+import { isValidKeyResultValues } from "../utils/validation";
 
 interface EditKRModalOptions {
 	onComplete?: () => void;
@@ -18,7 +19,7 @@ export class EditKRModal extends Modal {
 	private description: string;
 	private status: KeyResult["status"];
 	private isSubmitting = false;
-	private validate!: () => void;
+	private validate!: () => boolean;
 
 	constructor(
 		app: App,
@@ -135,6 +136,7 @@ export class EditKRModal extends Modal {
 		unitSelect.value = this.unit;
 		unitSelect.addEventListener("change", () => {
 			this.unit = unitSelect.value as KeyResult["unit"];
+			this.validate();
 		});
 
 		const currentField = contentEl.createDiv("okr-field");
@@ -155,7 +157,10 @@ export class EditKRModal extends Modal {
 		});
 		currentInput.addEventListener("input", () => {
 			const value = Number(currentInput.value);
-			const valid = Number.isFinite(value) && value >= 0;
+			const valid =
+				Number.isFinite(value) &&
+				value >= 0 &&
+				(this.unit !== "boolean" || value === 0 || value === 1);
 			this.current = valid ? value : 0;
 			currentInput.toggleClass(
 				"okr-invalid",
@@ -183,7 +188,10 @@ export class EditKRModal extends Modal {
 		});
 		targetInput.addEventListener("input", () => {
 			const value = Number(targetInput.value);
-			const valid = Number.isFinite(value) && value >= 0;
+			const valid =
+				Number.isFinite(value) &&
+				value > 0 &&
+				(this.unit !== "boolean" || value === 1);
 			this.target = valid ? value : 0;
 			targetInput.toggleClass(
 				"okr-invalid",
@@ -261,14 +269,18 @@ export class EditKRModal extends Modal {
 		});
 
 		this.validate = () => {
-			confirmBtn.disabled =
+			const valid = !(
 				this.isSubmitting ||
 				this.titleValue.length === 0 ||
 				this.owner.length === 0 ||
 				this.due.length === 0 ||
 				targetInput.value.length === 0 ||
+				!isValidKeyResultValues(this.unit, this.current, this.target) ||
 				targetInput.hasClass("okr-invalid") ||
-				currentInput.hasClass("okr-invalid");
+				currentInput.hasClass("okr-invalid")
+			);
+			confirmBtn.disabled = !valid;
+			return valid;
 		};
 		this.validate();
 	}
@@ -279,8 +291,7 @@ export class EditKRModal extends Modal {
 	}
 
 	private async submit(): Promise<void> {
-		this.validate();
-		if (this.isSubmitting || !this.titleValue || !this.owner || !this.due) {
+		if (this.isSubmitting || !this.validate()) {
 			return;
 		}
 

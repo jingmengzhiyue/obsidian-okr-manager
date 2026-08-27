@@ -49,9 +49,15 @@ export class OKRDetailRenderer {
 			if (type === OKR_TYPE_OBJECTIVE) {
 				const objId = String(fm[FRONTMATTER_OKR_ID] ?? "");
 				const period = String(fm[FRONTMATTER_OKR_PERIOD] ?? "");
-				const objective = (await manager.getObjectives(period)).find(
-					(item) => item.id === objId,
-				);
+				let objective: Objective | undefined;
+				try {
+					objective = (await manager.getObjectiveSummaries(period)).find(
+						(item) => item.id === objId,
+					);
+				} catch (error) {
+					this.showLoadError(manager, error);
+					return;
+				}
 				const section = this.renderObjectiveSection(
 					manager.getI18n(),
 					objective ?? {
@@ -179,24 +185,27 @@ export class OKRDetailRenderer {
 					}
 
 					const period = String(fm[FRONTMATTER_OKR_PERIOD] ?? "");
-					void manager.getAllKeyResults(period).then((krs) => {
-						const keyResult = krs.find((item) => item.id === krId);
-						if (!keyResult) {
-							new Notice(
-								manager
-									.getI18n()
-									.t("detail.editKeyResultMissing"),
-							);
-							return;
-						}
+					void manager
+						.getAllKeyResultSummaries(period)
+						.then((krs) => {
+							const keyResult = krs.find((item) => item.id === krId);
+							if (!keyResult) {
+								new Notice(
+									manager
+										.getI18n()
+										.t("detail.editKeyResultMissing"),
+								);
+								return;
+							}
 
-						new EditKRModal(
-							manager.getApp(),
-							manager,
-							keyResult,
-							{ onComplete: rerenderCurrentPreview },
-						).open();
-					});
+							new EditKRModal(
+								manager.getApp(),
+								manager,
+								keyResult,
+								{ onComplete: rerenderCurrentPreview },
+							).open();
+						})
+						.catch((error: unknown) => this.showLoadError(manager, error));
 				});
 			});
 
@@ -249,26 +258,29 @@ export class OKRDetailRenderer {
 						return;
 					}
 
-					void manager.getObjectives(period).then((objectives) => {
-						const objective = objectives.find(
-							(item) => item.id === objectiveId,
-						);
-						if (!objective) {
-							new Notice(
-								manager
-									.getI18n()
-									.t("detail.editObjectiveMissing"),
+					void manager
+						.getObjectiveSummaries(period)
+						.then((objectives) => {
+							const objective = objectives.find(
+								(item) => item.id === objectiveId,
 							);
-							return;
-						}
+							if (!objective) {
+								new Notice(
+									manager
+										.getI18n()
+										.t("detail.editObjectiveMissing"),
+								);
+								return;
+							}
 
-						new EditObjectiveModal(
-							manager.getApp(),
-							manager,
-							objective,
-							{ onComplete: rerenderCurrentPreview },
-						).open();
-					});
+							new EditObjectiveModal(
+								manager.getApp(),
+								manager,
+								objective,
+								{ onComplete: rerenderCurrentPreview },
+							).open();
+						})
+						.catch((error: unknown) => this.showLoadError(manager, error));
 				});
 			});
 
@@ -340,26 +352,29 @@ export class OKRDetailRenderer {
 						return;
 					}
 
-					void manager.getObjectives(period).then((objectives) => {
-						const objective = objectives.find(
-							(item) => item.id === objectiveId,
-						);
-						if (!objective) {
-							new Notice(
-								manager
-									.getI18n()
-									.t("detail.postponeObjectiveMissing"),
+					void manager
+						.getObjectiveSummaries(period)
+						.then((objectives) => {
+							const objective = objectives.find(
+								(item) => item.id === objectiveId,
 							);
-							return;
-						}
+							if (!objective) {
+								new Notice(
+									manager
+										.getI18n()
+										.t("detail.postponeObjectiveMissing"),
+								);
+								return;
+							}
 
-						new PostponeObjectiveModal(
-							manager.getApp(),
-							manager,
-							objective,
-							{ onComplete: rerenderCurrentPreview },
-						).open();
-					});
+							new PostponeObjectiveModal(
+								manager.getApp(),
+								manager,
+								objective,
+								{ onComplete: rerenderCurrentPreview },
+							).open();
+						})
+						.catch((error: unknown) => this.showLoadError(manager, error));
 				});
 			});
 
@@ -438,6 +453,17 @@ export class OKRDetailRenderer {
 
 		fragment.appendChild(table);
 		return fragment;
+	}
+
+	private static showLoadError(manager: OKRManager, error: unknown): void {
+		new Notice(
+			manager.getI18n().t("dashboard.loadFailedWithReason", {
+				message:
+					error instanceof Error
+						? error.message
+						: manager.getI18n().t("errors.unknown"),
+			}),
+		);
 	}
 
 	private static renderKRTableRow(

@@ -4,6 +4,7 @@ import { OKRManager } from "../manager/OKRManager";
 import { KeyResult } from "../types";
 import { getTodayLocalDate } from "../utils/date";
 import { getElementDocument, isActiveElement } from "../utils/document";
+import { isValidCheckInFields } from "../utils/validation";
 
 interface CheckInModalOptions {
 	prefillKrId?: string;
@@ -21,7 +22,8 @@ export class CheckInModal extends Modal {
 	private blocker: string = "";
 	private krs: KeyResult[] = [];
 	private isSubmitting = false;
-	private validate!: () => void;
+	private inputSource: "current" | "progress" = "current";
+	private validate!: () => boolean;
 
 	constructor(
 		app: App,
@@ -46,7 +48,19 @@ export class CheckInModal extends Modal {
 			text: this.t("modals.checkIn.title"),
 		});
 
-		this.krs = await this.loadAllKeyResults();
+		try {
+			this.krs = await this.loadAllKeyResults();
+		} catch (error) {
+			this.krs = [];
+			new Notice(
+				this.t("dashboard.loadFailedWithReason", {
+					message:
+						error instanceof Error
+							? error.message
+							: this.t("errors.unknown"),
+				}),
+			);
+		}
 		if (this.krId) {
 			const selected = this.findSelectedKR();
 			this.period = selected?.period ?? this.period;
@@ -85,6 +99,10 @@ export class CheckInModal extends Modal {
 			progressInput.value = String(this.progress);
 			slider.value = String(this.progress);
 			sliderVal.setText(`${this.progress}%`);
+			currentInput.removeClass("okr-invalid");
+			currentError.removeClass("visible");
+			progressInput.removeClass("okr-invalid");
+			progressError.removeClass("visible");
 			this.validate();
 		});
 
@@ -116,8 +134,14 @@ export class CheckInModal extends Modal {
 		currentInput.value = String(this.current);
 		currentInput.addEventListener("input", () => {
 			const value = Number(currentInput.value);
-			const valid = Number.isFinite(value) && value >= 0;
+			const selected = this.findSelectedKR();
+			const valid =
+				currentInput.value.length > 0 &&
+				Number.isFinite(value) &&
+				value >= 0 &&
+				(selected?.unit !== "boolean" || value === 0 || value === 1);
 			this.current = valid ? value : 0;
+			this.inputSource = "current";
 			currentInput.toggleClass(
 				"okr-invalid",
 				currentInput.value.length > 0 && !valid,
@@ -126,10 +150,12 @@ export class CheckInModal extends Modal {
 				"visible",
 				currentInput.value.length > 0 && !valid,
 			);
-			this.progress = this.calculateProgressFromCurrent();
-			progressInput.value = String(this.progress);
-			slider.value = String(this.progress);
-			sliderVal.setText(`${this.progress}%`);
+			if (this.manager.getSettings().autoComputeProgress) {
+				this.progress = this.calculateProgressFromCurrent();
+				progressInput.value = String(this.progress);
+				slider.value = String(this.progress);
+				sliderVal.setText(`${this.progress}%`);
+			}
 			this.validate();
 		});
 
@@ -152,8 +178,15 @@ export class CheckInModal extends Modal {
 		});
 		progressInput.addEventListener("input", () => {
 			const value = Number(progressInput.value);
-			const valid = Number.isFinite(value) && value >= 0 && value <= 100;
+			const selected = this.findSelectedKR();
+			const valid =
+				Number.isFinite(value) &&
+				Number.isInteger(value) &&
+				value >= 0 &&
+				value <= 100 &&
+				(selected?.unit !== "boolean" || value === 0 || value === 100);
 			this.progress = valid ? Math.round(value) : 0;
+			this.inputSource = "progress";
 			progressInput.toggleClass(
 				"okr-invalid",
 				progressInput.value.length > 0 && !valid,
@@ -164,9 +197,11 @@ export class CheckInModal extends Modal {
 			);
 			slider.value = String(this.progress);
 			sliderVal.setText(`${this.progress}%`);
-			this.current = this.calculateCurrentFromProgress();
-			if (!isActiveElement(currentInput, modalDoc)) {
-				currentInput.value = String(this.current);
+			if (this.manager.getSettings().autoComputeProgress) {
+				this.current = this.calculateCurrentFromProgress();
+				if (!isActiveElement(currentInput, modalDoc)) {
+					currentInput.value = String(this.current);
+				}
 			}
 			this.validate();
 		});
@@ -186,16 +221,36 @@ export class CheckInModal extends Modal {
 		});
 		slider.addEventListener("input", () => {
 			this.progress = Number.parseInt(slider.value, 10);
+			this.inputSource = "progress";
 			sliderVal.setText(`${this.progress}%`);
 			progressInput.value = String(this.progress);
-			progressInput.removeClass("okr-invalid");
-			progressError.removeClass("visible");
-			this.current = this.calculateCurrentFromProgress();
-			if (!isActiveElement(currentInput, modalDoc)) {
-				currentInput.value = String(this.current);
+			const valid =
+				this.findSelectedKR()?.unit !== "boolean" ||
+				this.progress === 0 ||
+				this.progress === 100;
+			progressInput.toggleClass("okr-invalid", !valid);
+			progressError.toggleClass("visible", !valid);
+			if (this.manager.getSettings().autoComputeProgress) {
+				this.current = this.calculateCurrentFromProgress();
+				if (!isActiveElement(currentInput, modalDoc)) {
+					currentInput.value = String(this.current);
+				}
 			}
 			this.validate();
 		});
+		const syncUnitConstraints = (): void => {
+			const isBoolean = this.findSelectedKR()?.unit === "boolean";
+			currentInput.setAttribute("step", isBoolean ? "1" : "any");
+			if (isBoolean) {
+				currentInput.setAttribute("max", "1");
+			} else {
+				currentInput.removeAttribute("max");
+			}
+			progressInput.setAttribute("step", isBoolean ? "100" : "1");
+			slider.setAttribute("step", isBoolean ? "100" : "1");
+		};
+		syncUnitConstraints();
+		krSelect.addEventListener("change", syncUnitConstraints);
 
 		const noteField = contentEl.createDiv("okr-field");
 		noteField.createEl("label", {
@@ -240,14 +295,21 @@ export class CheckInModal extends Modal {
 		});
 
 		this.validate = () => {
+			const selected = this.findSelectedKR();
 			const valid =
 				!this.isSubmitting &&
 				this.krId.length > 0 &&
-				this.date.length > 0 &&
 				this.krs.length > 0 &&
+				isValidCheckInFields(
+					this.date,
+					currentInput.value,
+					progressInput.value,
+					selected?.unit,
+				) &&
 				!currentInput.hasClass("okr-invalid") &&
 				!progressInput.hasClass("okr-invalid");
 			confirmBtn.disabled = !valid;
+			return valid;
 		};
 		this.validate();
 
@@ -269,8 +331,7 @@ export class CheckInModal extends Modal {
 	}
 
 	private async submit(): Promise<void> {
-		this.validate();
-		if (this.isSubmitting || !this.krId) {
+		if (this.isSubmitting || !this.validate()) {
 			return;
 		}
 
@@ -281,7 +342,11 @@ export class CheckInModal extends Modal {
 				krId: this.krId,
 				period: this.period,
 				date: this.date,
-				current: this.current,
+				current:
+					!this.manager.getSettings().autoComputeProgress ||
+					this.inputSource === "current"
+						? this.current
+						: undefined,
 				progress: this.progress,
 				note: this.note,
 				blocker: this.blocker,
@@ -316,10 +381,11 @@ export class CheckInModal extends Modal {
 	}
 
 	private async loadAllKeyResults(): Promise<KeyResult[]> {
-		return this.manager.getAllKeyResults();
+		return this.manager.getAllKeyResultSummaries();
 	}
 
 	private syncSelectedKRValues(): void {
+		this.inputSource = "current";
 		const selected = this.findSelectedKR();
 		if (!selected) {
 			this.current = 0;
@@ -365,7 +431,7 @@ export class CheckInModal extends Modal {
 			return 0;
 		}
 
-		return Math.round((this.progress / 100) * kr.target);
+		return (this.progress / 100) * kr.target;
 	}
 
 	private findSelectedKR(): KeyResult | undefined {

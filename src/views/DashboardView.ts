@@ -115,7 +115,9 @@ export class DashboardView extends ItemView {
 			return;
 		}
 
-		this.objectives = await this.manager.getObjectives(this.currentPeriod);
+		this.objectives = await this.manager.getObjectiveSummaries(
+			this.currentPeriod,
+		);
 		this.krsMap.clear();
 		for (const objective of this.objectives) {
 			this.krsMap.set(objective.id, objective.keyResults);
@@ -242,7 +244,8 @@ export class DashboardView extends ItemView {
 		const header = card.createDiv("okr-obj-header");
 		const headerLeft = header.createDiv("okr-obj-header-left");
 
-		const isCollapsed = this.collapsedObjs.has(obj.id);
+		const stateKey = this.getObjectiveStateKey(obj);
+		const isCollapsed = this.collapsedObjs.has(stateKey);
 		const collapseBtn = headerLeft.createEl("button", {
 			cls: `okr-collapse-btn${isCollapsed ? " okr-collapsed" : ""}`,
 		});
@@ -253,11 +256,11 @@ export class DashboardView extends ItemView {
 		setIcon(collapseBtn, "chevron-right");
 		collapseBtn.addEventListener("click", (event) => {
 			event.stopPropagation();
-			const willCollapse = !this.collapsedObjs.has(obj.id);
+			const willCollapse = !this.collapsedObjs.has(stateKey);
 			if (willCollapse) {
-				this.collapsedObjs.add(obj.id);
+				this.collapsedObjs.add(stateKey);
 			} else {
-				this.collapsedObjs.delete(obj.id);
+				this.collapsedObjs.delete(stateKey);
 			}
 			krList.toggleClass("is-collapsed", willCollapse);
 			collapseBtn.toggleClass("okr-collapsed", willCollapse);
@@ -794,6 +797,10 @@ export class DashboardView extends ItemView {
 
 	private openPostponeObjectiveModal(objective: Objective): void {
 		new PostponeObjectiveModal(this.app, this.manager, objective).open();
+	}
+
+	private getObjectiveStateKey(objective: Objective): string {
+		return `${objective.period}::${objective.id}`;
 	}
 
 	private t(key: string, values?: Record<string, string | number>): string {

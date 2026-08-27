@@ -14,7 +14,7 @@ export class NewObjectiveModal extends Modal {
 	private description: string = "";
 	private isSubmitting = false;
 	private onComplete?: () => void;
-	private validate!: () => void;
+	private validate!: () => boolean;
 
 	constructor(
 		app: App,
@@ -98,6 +98,11 @@ export class NewObjectiveModal extends Modal {
 		periodInput.addEventListener("input", () => {
 			this.period = periodInput.value.trim();
 			const valid = parser.isValidPeriod(this.period, this.periodType);
+			if (valid) {
+				this.due =
+					parser.getDueForPeriod(this.period, this.periodType) ?? this.due;
+				dueInput.value = this.due;
+			}
 			periodInput.toggleClass(
 				"okr-invalid",
 				this.period.length > 0 && !valid,
@@ -182,6 +187,7 @@ export class NewObjectiveModal extends Modal {
 				this.due.length > 0 &&
 				!this.isSubmitting;
 			confirmBtn.disabled = !valid;
+			return valid;
 		};
 		this.validate();
 
@@ -199,14 +205,7 @@ export class NewObjectiveModal extends Modal {
 	}
 
 	private async submit(): Promise<void> {
-		this.validate();
-		if (
-			this.isSubmitting ||
-			!this.period ||
-			!this.title ||
-			!this.owner ||
-			!this.due
-		) {
+		if (this.isSubmitting || !this.validate()) {
 			return;
 		}
 

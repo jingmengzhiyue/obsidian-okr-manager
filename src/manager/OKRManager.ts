@@ -31,6 +31,10 @@ import {
 	reorderKeyResultOrders,
 } from "../utils/sort";
 import { collectMarkdownFilesFromTree } from "../utils/fileTree";
+import {
+	isValidCheckInFields,
+	isValidKeyResultValues,
+} from "../utils/validation";
 
 interface PeriodCacheEntry {
 	objectives: Objective[];
@@ -48,7 +52,10 @@ interface ObjectiveLookupResult {
 export class OKRManager {
 	private parser: FileParser;
 	private readonly cache = new Map<string, PeriodCacheEntry>();
+	private readonly summaryCache = new Map<string, PeriodCacheEntry>();
+	private readonly mutationQueues = new Map<string, Promise<void>>();
 	private readonly CACHE_TTL = 30_000;
+	private cacheVersion = 0;
 
 	constructor(
 		private app: App,
@@ -84,10 +91,10 @@ export class OKRManager {
 	}
 
 	invalidateCacheForFile(file: TAbstractFile): boolean {
-		const path = normalizePath(file.path);
+		const path = file.path;
 		const period = this.extractPeriodFromPath(path);
 		if (period) {
-			this.cache.delete(period);
+			this.invalidatePeriodCaches(period);
 			return true;
 		}
 		return false;
@@ -97,14 +104,16 @@ export class OKRManager {
 		const normalized = normalizePath(oldPath);
 		const period = this.extractPeriodFromPath(normalized);
 		if (period) {
-			this.cache.delete(period);
+			this.invalidatePeriodCaches(period);
 			return true;
 		}
 		return false;
 	}
 
 	clearAllCache(): void {
+		this.cacheVersion += 1;
 		this.cache.clear();
+		this.summaryCache.clear();
 	}
 
 	async getAllPeriods(): Promise<string[]> {
@@ -118,11 +127,19 @@ export class OKRManager {
 		return root.children
 			.filter((child): child is TFolder => child instanceof TFolder)
 			.map((child) => child.name)
-			.filter((name) => PERIOD_PATTERN.test(name))
+			.filter(
+				(name) =>
+					PERIOD_PATTERN.test(name) &&
+					this.parser.isValidPeriod(
+						name,
+						this.parser.inferPeriodType(name),
+					),
+			)
 			.sort(
 				(left, right) =>
 					this.parser.getPeriodSortValue(left) -
-					this.parser.getPeriodSortValue(right),
+						this.parser.getPeriodSortValue(right) ||
+					left.localeCompare(right),
 			);
 	}
 
@@ -133,8 +150,62 @@ export class OKRManager {
 			return cached.objectives;
 		}
 
-		const objectives = await this.loadObjectivesForPeriod(normalizedPeriod);
+		const loadVersion = this.cacheVersion;
+		const objectives = await this.loadObjectivesForPeriod(
+			normalizedPeriod,
+			loadVersion,
+		);
+		if (loadVersion !== this.cacheVersion) {
+			return (
+				this.getValidCache(normalizedPeriod)?.objectives ??
+				this.getObjectives(normalizedPeriod)
+			);
+		}
 		return objectives;
+	}
+
+	async getObjectiveSummaries(period: string): Promise<Objective[]> {
+		const normalizedPeriod = this.normalizePeriod(period);
+		const cached = this.getValidCache(normalizedPeriod, this.summaryCache);
+		if (cached) {
+			return cached.objectives;
+		}
+		const loadVersion = this.cacheVersion;
+		const objectives = await this.loadObjectiveSummariesForPeriod(
+			normalizedPeriod,
+			loadVersion,
+		);
+		if (loadVersion !== this.cacheVersion) {
+			return (
+				this.getValidCache(normalizedPeriod, this.summaryCache)?.objectives ??
+				this.getObjectiveSummaries(normalizedPeriod)
+			);
+		}
+		return objectives;
+	}
+
+	async getKeyResultSummaries(
+		objectiveId: string,
+		period: string,
+	): Promise<KeyResult[]> {
+		const objectives = await this.getObjectiveSummaries(period);
+		return objectives.find((item) => item.id === objectiveId)?.keyResults ?? [];
+	}
+
+	async getAllKeyResultSummaries(period?: string): Promise<KeyResult[]> {
+		if (period) {
+			const objectives = await this.getObjectiveSummaries(period);
+			return objectives.flatMap((objective) => objective.keyResults);
+		}
+		const periods = await this.getAllPeriods();
+		const nested = await Promise.all(
+			periods.map((currentPeriod) =>
+				this.getAllKeyResultSummaries(currentPeriod),
+			),
+		);
+		return nested.flat().sort((left, right) =>
+			compareKeyResultIds(left.id, right.id),
+		);
 	}
 
 	async getKeyResults(
@@ -147,7 +218,7 @@ export class OKRManager {
 			return cached.keyResultsByObjective.get(objectiveId) ?? [];
 		}
 
-		const objectives = await this.loadObjectivesForPeriod(normalizedPeriod);
+		const objectives = await this.getObjectives(normalizedPeriod);
 		return (
 			objectives.find((objective) => objective.id === objectiveId)
 				?.keyResults ?? []
@@ -162,8 +233,8 @@ export class OKRManager {
 				return cached.allKeyResults;
 			}
 
-			await this.loadObjectivesForPeriod(normalizedPeriod);
-			return this.cache.get(normalizedPeriod)?.allKeyResults ?? [];
+			const objectives = await this.getObjectives(normalizedPeriod);
+			return objectives.flatMap((objective) => objective.keyResults);
 		}
 
 		const periods = await this.getAllPeriods();
@@ -181,15 +252,28 @@ export class OKRManager {
 		);
 	}
 
-	async getCheckIns(krId: string): Promise<CheckIn[]> {
-		const found = await this.findObjectiveEntryByKRId(krId);
+	async getCheckIns(krId: string, period?: string): Promise<CheckIn[]> {
+		const found = await this.findObjectiveEntryByKRId(
+			krId,
+			period ? this.normalizePeriod(period) : undefined,
+		);
 		if (!found) {
 			return [];
 		}
 
+		const cached = this.getValidCache(found.objective.period);
+		const cachedCheckIns = cached?.checkIns.get(krId);
+		if (cachedCheckIns) {
+			return cachedCheckIns;
+		}
+
+		const content = await this.app.vault.read(found.file);
+		const objective = this.normalizeObjective(
+			this.parser.parseObjectiveContent(found.file, content),
+		);
+		this.assertObjectiveMatchesPeriod(objective, found.objective.period);
 		return (
-			found.objective.keyResults.find((item) => item.id === krId)
-				?.checkIns ?? []
+			objective.keyResults.find((item) => item.id === krId)?.checkIns ?? []
 		);
 	}
 
@@ -197,7 +281,10 @@ export class OKRManager {
 		params: Omit<Objective, "id" | "progress" | "filePath" | "keyResults">,
 	): Promise<Objective> {
 		const period = this.normalizePeriod(params.period, params.periodType);
-		const existing = await this.getObjectives(period);
+		if (!this.parser.isValidPeriod(period, params.periodType)) {
+			throw new Error(this.t("errors.invalidPeriod", { period }));
+		}
+		const existing = await this.getObjectiveSummaries(period);
 		const nextId =
 			existing.reduce((max, objective) => {
 				const parsed = Number.parseInt(
@@ -235,7 +322,7 @@ export class OKRManager {
 			filePath,
 			this.buildObjectiveContent(objective),
 		);
-		this.cache.delete(period);
+		this.upsertObjectiveInCaches(objective);
 		return objective;
 	}
 
@@ -245,6 +332,11 @@ export class OKRManager {
 			"id" | "progress" | "filePath" | "periodType" | "order" | "checkIns"
 		>,
 	): Promise<KeyResult> {
+		if (
+			!isValidKeyResultValues(params.unit, params.current, params.target)
+		) {
+			throw new Error(this.t("errors.invalidKeyResultValues"));
+		}
 		const entry = await this.findObjectiveEntry(
 			params.objectiveId,
 			params.period,
@@ -257,58 +349,54 @@ export class OKRManager {
 			);
 		}
 
-		const existing = entry.objective.keyResults;
-		const nextIndex =
-			existing.reduce((max, keyResult) => {
-				const match = keyResult.id.match(/-KR(\d+)$/);
-				const value = match ? Number.parseInt(match[1] ?? "0", 10) : 0;
-				return Math.max(max, value);
-			}, 0) + 1;
-		const id = `${params.objectiveId}-KR${nextIndex}`;
-		const progress = this.settings.autoComputeProgress
-			? this.parser.calculateKRProgress(
-					params.current,
-					params.target,
-					params.unit,
-				)
-			: 0;
-
-		const keyResult: KeyResult = {
-			id,
-			objectiveId: entry.objective.id,
-			period: entry.objective.period,
-			periodType: entry.objective.periodType,
-			order:
-				existing.reduce(
-					(max, keyResult) => Math.max(max, keyResult.order),
-					-1,
-				) + 1,
-			title: params.title.trim(),
-			description: params.description.trim(),
-			owner: params.owner.trim(),
-			unit: params.unit,
-			current: params.current,
-			target: params.target,
-			progress,
-			status: params.status,
-			confidence: params.confidence,
-			created: params.created,
-			due: params.due,
-			filePath: entry.file.path,
-			checkIns: [],
-		};
-
-		const updatedObjective: Objective = {
-			...entry.objective,
-			keyResults: [...entry.objective.keyResults, keyResult],
-		};
-		updatedObjective.progress = this.parser.calculateObjectiveProgress(
-			updatedObjective.keyResults,
-		);
-
-		await this.writeObjective(entry.file, updatedObjective);
-		this.cache.delete(updatedObjective.period);
-		return keyResult;
+		let created: KeyResult | null = null;
+		await this.mutateObjective(entry.file, (objective) => {
+			const existing = objective.keyResults;
+			const nextIndex =
+				existing.reduce((max, keyResult) => {
+					const match = keyResult.id.match(/-KR(\d+)$/);
+					const value = match
+						? Number.parseInt(match[1] ?? "0", 10)
+						: 0;
+					return Math.max(max, value);
+				}, 0) + 1;
+			const progress = this.settings.autoComputeProgress
+				? this.parser.calculateKRProgress(
+						params.current,
+						params.target,
+						params.unit,
+					)
+				: 0;
+			created = {
+				id: `${objective.id}-KR${nextIndex}`,
+				objectiveId: objective.id,
+				period: objective.period,
+				periodType: objective.periodType,
+				order:
+					existing.reduce(
+						(max, keyResult) => Math.max(max, keyResult.order),
+						-1,
+					) + 1,
+				title: params.title.trim(),
+				description: params.description.trim(),
+				owner: params.owner.trim(),
+				unit: params.unit,
+				current: params.current,
+				target: params.target,
+				progress,
+				status: params.status,
+				confidence: params.confidence,
+				created: params.created,
+				due: params.due,
+				filePath: entry.file.path,
+				checkIns: [],
+			};
+			return { ...objective, keyResults: [...existing, created] };
+		});
+		if (!created) {
+			throw new Error(this.t("errors.keyResultNotFound", { id: params.objectiveId }));
+		}
+		return created;
 	}
 
 	async updateObjective(
@@ -326,21 +414,14 @@ export class OKRManager {
 			);
 		}
 
-		const updatedObjective: Objective = {
-			...entry.objective,
+		return this.mutateObjective(entry.file, (objective) => ({
+			...objective,
 			title: updates.title.trim(),
 			description: updates.description.trim(),
 			owner: updates.owner.trim(),
 			status: updates.status,
 			due: updates.due,
-		};
-		updatedObjective.progress = this.parser.calculateObjectiveProgress(
-			updatedObjective.keyResults,
-		);
-
-		await this.writeObjective(entry.file, updatedObjective);
-		this.cache.delete(updatedObjective.period);
-		return updatedObjective;
+		}));
 	}
 
 	async updateKeyResult(
@@ -359,6 +440,11 @@ export class OKRManager {
 			| "due"
 		>,
 	): Promise<KeyResult> {
+		if (
+			!isValidKeyResultValues(updates.unit, updates.current, updates.target)
+		) {
+			throw new Error(this.t("errors.invalidKeyResultValues"));
+		}
 		const found = await this.findObjectiveEntryByKRId(
 			krId,
 			this.normalizePeriod(period),
@@ -368,48 +454,40 @@ export class OKRManager {
 		}
 
 		let updatedKeyResult: KeyResult | null = null;
-		const updatedKeyResults = found.objective.keyResults.map((item) => {
-			if (item.id !== krId) {
-				return item;
+		await this.mutateObjective(found.file, (objective) => {
+			const updatedKeyResults = objective.keyResults.map((item) => {
+				if (item.id !== krId) {
+					return item;
+				}
+
+				const progress = this.settings.autoComputeProgress
+					? this.parser.calculateKRProgress(
+							updates.current,
+							updates.target,
+							updates.unit,
+						)
+					: this.parser.clampProgress(item.progress);
+				updatedKeyResult = {
+					...item,
+					title: updates.title.trim(),
+					description: updates.description.trim(),
+					owner: updates.owner.trim(),
+					unit: updates.unit,
+					current: updates.current,
+					target: updates.target,
+					progress,
+					status: updates.status,
+					confidence: updates.confidence,
+					due: updates.due,
+				};
+				return updatedKeyResult;
+			});
+			if (!updatedKeyResult) {
+				throw new Error(this.t("errors.keyResultNotFound", { id: krId }));
 			}
-
-			const progress = this.settings.autoComputeProgress
-				? this.parser.calculateKRProgress(
-						updates.current,
-						updates.target,
-						updates.unit,
-					)
-				: this.parser.clampProgress(item.progress);
-			updatedKeyResult = {
-				...item,
-				title: updates.title.trim(),
-				description: updates.description.trim(),
-				owner: updates.owner.trim(),
-				unit: updates.unit,
-				current: updates.current,
-				target: updates.target,
-				progress,
-				status: updates.status,
-				confidence: updates.confidence,
-				due: updates.due,
-			};
-			return updatedKeyResult;
+			return { ...objective, keyResults: updatedKeyResults };
 		});
-		if (!updatedKeyResult) {
-			throw new Error(this.t("errors.keyResultNotFound", { id: krId }));
-		}
-
-		const updatedObjective: Objective = {
-			...found.objective,
-			keyResults: updatedKeyResults,
-		};
-		updatedObjective.progress = this.parser.calculateObjectiveProgress(
-			updatedObjective.keyResults,
-		);
-
-		await this.writeObjective(found.file, updatedObjective);
-		this.cache.delete(updatedObjective.period);
-		return updatedKeyResult;
+		return updatedKeyResult!;
 	}
 
 	async recordCheckIn(
@@ -428,69 +506,76 @@ export class OKRManager {
 			);
 		}
 
-		const keyResult = found.objective.keyResults.find(
-			(item) => item.id === params.krId,
-		);
-		if (!keyResult) {
-			throw new Error(
-				this.t("errors.keyResultNotFound", { id: params.krId }),
+		await this.mutateObjective(found.file, (objective) => {
+			const keyResult = objective.keyResults.find(
+				(item) => item.id === params.krId,
 			);
-		}
-
-		const history = keyResult.checkIns;
-		const hasCurrent =
-			typeof params.current === "number" &&
-			Number.isFinite(params.current);
-		const progress =
-			this.settings.autoComputeProgress && hasCurrent
-				? this.parser.calculateKRProgress(
-						params.current!,
-						keyResult.target,
-						keyResult.unit,
-					)
-				: this.parser.clampProgress(params.progress);
-		const latestProgress = history[0]?.progress ?? 0;
-		const delta = history.length > 0 ? progress - latestProgress : progress;
-		const nextCheckIn: CheckIn = {
-			id: `${params.krId}-${Date.now()}`,
-			krId: params.krId,
-			date: params.date,
-			progress,
-			delta,
-			note: params.note.trim(),
-			blocker: params.blocker.trim(),
-			recordedAt: new Date().toISOString(),
-		};
-
-		const updatedKeyResults = found.objective.keyResults.map((item) => {
-			if (item.id !== params.krId) {
-				return item;
+			if (!keyResult) {
+				throw new Error(
+					this.t("errors.keyResultNotFound", { id: params.krId }),
+				);
 			}
 
-			return {
-				...item,
-				current: this.settings.autoComputeProgress
-					? hasCurrent
-						? params.current!
-						: this.inferCurrentFromProgress(item, progress)
-					: item.current,
+			const history = keyResult.checkIns;
+			const hasCurrent =
+				typeof params.current === "number" &&
+				Number.isFinite(params.current);
+			const progress =
+				this.settings.autoComputeProgress && hasCurrent
+					? this.parser.calculateKRProgress(
+							params.current!,
+							keyResult.target,
+							keyResult.unit,
+						)
+					: this.parser.clampProgress(params.progress);
+			const current = hasCurrent
+				? params.current!
+				: this.settings.autoComputeProgress
+					? this.inferCurrentFromProgress(keyResult, progress)
+					: keyResult.current;
+			if (
+				!Number.isFinite(params.progress) ||
+				!Number.isInteger(params.progress) ||
+				params.progress < 0 ||
+				params.progress > 100 ||
+				!isValidCheckInFields(
+					params.date,
+					String(current),
+					String(progress),
+					keyResult.unit,
+				)
+			) {
+				throw new Error(this.t("errors.invalidCheckInValues"));
+			}
+			const latestProgress = history[0]?.progress ?? 0;
+			const delta =
+				history.length > 0 ? progress - latestProgress : progress;
+			const recordedAt = new Date().toISOString();
+			const nextCheckIn: CheckIn = {
+				id: `${params.krId}-${recordedAt}-${crypto.randomUUID()}`,
+				krId: params.krId,
+				date: params.date,
 				progress,
-				checkIns: [...item.checkIns, nextCheckIn].sort((left, right) =>
-					right.recordedAt.localeCompare(left.recordedAt),
-				),
+				delta,
+				note: params.note.trim(),
+				blocker: params.blocker.trim(),
+				recordedAt,
 			};
+			const updatedKeyResults = objective.keyResults.map((item) =>
+				item.id === params.krId
+					? {
+							...item,
+							current,
+							progress,
+							checkIns: [...item.checkIns, nextCheckIn].sort(
+								(left, right) =>
+									right.recordedAt.localeCompare(left.recordedAt),
+							),
+						}
+					: item,
+			);
+			return { ...objective, keyResults: updatedKeyResults };
 		});
-
-		const updatedObjective: Objective = {
-			...found.objective,
-			keyResults: updatedKeyResults,
-		};
-		updatedObjective.progress = this.parser.calculateObjectiveProgress(
-			updatedObjective.keyResults,
-		);
-
-		await this.writeObjective(found.file, updatedObjective);
-		this.cache.delete(updatedObjective.period);
 	}
 
 	async moveKeyResult(
@@ -506,21 +591,32 @@ export class OKRManager {
 			throw new Error(this.t("errors.keyResultNotFound", { id: krId }));
 		}
 
-		const sorted = [...found.objective.keyResults].sort(
-			(left, right) => left.order - right.order,
-		);
-		const currentIndex = sorted.findIndex((item) => item.id === krId);
-		if (currentIndex === -1) {
-			throw new Error(this.t("errors.keyResultNotFound", { id: krId }));
-		}
+		await this.mutateObjective(found.file, (objective) => {
+			const sorted = normalizeKeyResultOrders(objective.keyResults);
+			const currentIndex = sorted.findIndex((item) => item.id === krId);
+			if (currentIndex === -1) {
+				throw new Error(this.t("errors.keyResultNotFound", { id: krId }));
+			}
 
-		const targetIndex =
-			direction === "up" ? currentIndex - 1 : currentIndex + 1;
-		if (targetIndex < 0 || targetIndex >= sorted.length) {
-			return;
-		}
+			const targetIndex =
+				direction === "up" ? currentIndex - 1 : currentIndex + 1;
+			if (targetIndex < 0 || targetIndex >= sorted.length) {
+				return objective;
+			}
 
-		await this.reorderKeyResult(krId, period, targetIndex);
+			const [moved] = sorted.splice(currentIndex, 1);
+			if (!moved) {
+				return objective;
+			}
+			sorted.splice(targetIndex, 0, moved);
+			return {
+				...objective,
+				keyResults: sorted.map((item, index) => ({
+					...item,
+					order: index,
+				})),
+			};
+		});
 	}
 
 	async reorderKeyResult(
@@ -536,36 +632,28 @@ export class OKRManager {
 			throw new Error(this.t("errors.keyResultNotFound", { id: krId }));
 		}
 
-		const sorted = normalizeKeyResultOrders(found.objective.keyResults);
-		const currentIndex = sorted.findIndex((item) => item.id === krId);
-		if (currentIndex === -1) {
-			throw new Error(this.t("errors.keyResultNotFound", { id: krId }));
-		}
-
-		const clampedIndex = Math.max(
-			0,
-			Math.min(targetIndex, sorted.length - 1),
-		);
-		if (clampedIndex === currentIndex) {
-			return;
-		}
-
-		const reordered = reorderKeyResultOrders(
-			sorted,
-			currentIndex,
-			clampedIndex,
-		);
-
-		const updatedObjective: Objective = {
-			...found.objective,
-			keyResults: reordered,
-		};
-		updatedObjective.progress = this.parser.calculateObjectiveProgress(
-			updatedObjective.keyResults,
-		);
-
-		await this.writeObjective(found.file, updatedObjective);
-		this.cache.delete(updatedObjective.period);
+		await this.mutateObjective(found.file, (objective) => {
+			const sorted = normalizeKeyResultOrders(objective.keyResults);
+			const currentIndex = sorted.findIndex((item) => item.id === krId);
+			if (currentIndex === -1) {
+				throw new Error(this.t("errors.keyResultNotFound", { id: krId }));
+			}
+			const clampedIndex = Math.max(
+				0,
+				Math.min(targetIndex, sorted.length - 1),
+			);
+			return {
+				...objective,
+				keyResults:
+					clampedIndex === currentIndex
+						? sorted
+						: reorderKeyResultOrders(
+								sorted,
+								currentIndex,
+								clampedIndex,
+							),
+			};
+		});
 	}
 
 	async updateKRProgress(
@@ -581,31 +669,22 @@ export class OKRManager {
 			return;
 		}
 
-		const updatedKeyResults = found.objective.keyResults.map((item) => {
-			if (item.id !== krId) {
-				return item;
-			}
-
-			const progress = this.parser.clampProgress(newProgress);
-			return {
-				...item,
-				current: this.settings.autoComputeProgress
-					? this.inferCurrentFromProgress(item, progress)
-					: item.current,
-				progress,
-			};
-		});
-
-		const updatedObjective: Objective = {
-			...found.objective,
-			keyResults: updatedKeyResults,
-		};
-		updatedObjective.progress = this.parser.calculateObjectiveProgress(
-			updatedObjective.keyResults,
-		);
-
-		await this.writeObjective(found.file, updatedObjective);
-		this.cache.delete(updatedObjective.period);
+		await this.mutateObjective(found.file, (objective) => ({
+			...objective,
+			keyResults: objective.keyResults.map((item) => {
+				if (item.id !== krId) {
+					return item;
+				}
+				const progress = this.parser.clampProgress(newProgress);
+				return {
+					...item,
+					current: this.settings.autoComputeProgress
+						? this.inferCurrentFromProgress(item, progress)
+						: item.current,
+					progress,
+				};
+			}),
+		}));
 	}
 
 	async updateStatus(filePath: string, status: OKRStatus): Promise<void> {
@@ -616,15 +695,7 @@ export class OKRManager {
 			return;
 		}
 
-		const frontmatter = await this.parser.readFrontmatter(file);
-		if (frontmatter[FRONTMATTER_OKR_TYPE] !== OKR_TYPE_OBJECTIVE) {
-			return;
-		}
-
-		const content = await this.app.vault.read(file);
-		const objective = this.parser.parseObjective(file, frontmatter, content);
-		await this.writeObjective(file, { ...objective, status });
-		this.cache.delete(objective.period);
+		await this.mutateObjective(file, (objective) => ({ ...objective, status }));
 	}
 
 	async deleteObjective(
@@ -640,7 +711,7 @@ export class OKRManager {
 		}
 
 		await this.app.fileManager.trashFile(entry.file);
-		this.cache.delete(this.normalizePeriod(period));
+		this.invalidatePeriodCaches(this.normalizePeriod(period));
 	}
 
 	async deleteKeyResult(krId: string, period: string): Promise<void> {
@@ -654,28 +725,17 @@ export class OKRManager {
 			);
 		}
 
-		const updatedKeyResults = found.objective.keyResults
-			.filter((item) => item.id !== krId)
-			.map((item, index) => ({
-				...item,
-				order: index,
-			}));
-		if (updatedKeyResults.length === found.objective.keyResults.length) {
-			throw new Error(
-				this.t("errors.keyResultToDeleteNotFound", { id: krId }),
-			);
-		}
-
-		const updatedObjective: Objective = {
-			...found.objective,
-			keyResults: updatedKeyResults,
-		};
-		updatedObjective.progress = this.parser.calculateObjectiveProgress(
-			updatedObjective.keyResults,
-		);
-
-		await this.writeObjective(found.file, updatedObjective);
-		this.cache.delete(updatedObjective.period);
+		await this.mutateObjective(found.file, (objective) => {
+			const updatedKeyResults = objective.keyResults
+				.filter((item) => item.id !== krId)
+				.map((item, index) => ({ ...item, order: index }));
+			if (updatedKeyResults.length === objective.keyResults.length) {
+				throw new Error(
+					this.t("errors.keyResultToDeleteNotFound", { id: krId }),
+				);
+			}
+			return { ...objective, keyResults: updatedKeyResults };
+		});
 	}
 
 	async migrateLegacyProgressRecords(): Promise<{
@@ -697,14 +757,10 @@ export class OKRManager {
 					continue;
 				}
 
-				const content = await this.app.vault.read(file);
-				const objective = this.normalizeObjective(
-					this.parser.parseObjective(file, frontmatter, content),
-				);
-				await this.writeObjective(file, objective);
+				await this.mutateObjective(file, (objective) => objective);
 				migrated += 1;
 			}
-			this.cache.delete(period);
+			this.invalidatePeriodCaches(period);
 		}
 
 		return { scanned, migrated };
@@ -712,10 +768,61 @@ export class OKRManager {
 
 	private async loadObjectivesForPeriod(
 		period: string,
+		loadVersion: number,
 	): Promise<Objective[]> {
 		const files = this.getObjectiveFiles(period);
+		const failures: string[] = [];
 		const parsed = await Promise.all(
 			files.map(async (file) => {
+				try {
+					const content = await this.app.vault.read(file);
+					const frontmatter = this.parser.parseFrontmatterContent(
+						content,
+						file.path,
+					);
+					if (
+						frontmatter[FRONTMATTER_OKR_TYPE] !== OKR_TYPE_OBJECTIVE
+					) {
+						return null;
+					}
+					const objective = this.normalizeObjective(
+						this.parser.parseObjective(file, frontmatter, content),
+					);
+					this.assertObjectiveMatchesPeriod(objective, period);
+					return objective;
+				} catch (error) {
+					const message =
+						error instanceof Error ? error.message : this.t("errors.unknown");
+					failures.push(`${file.path}: ${message}`);
+					return null;
+				}
+			}),
+		);
+		if (failures.length > 0) {
+			throw new Error(
+				this.t("errors.invalidObjectiveFiles", {
+					files: failures.join("; "),
+				}),
+			);
+		}
+
+		const objectives = parsed
+			.filter((item): item is Objective => item !== null)
+			.sort((left, right) => compareObjectiveIds(left.id, right.id));
+		this.assertUniqueObjectiveIds(objectives);
+		if (loadVersion === this.cacheVersion) {
+			this.cache.set(period, this.buildPeriodCacheEntry(objectives));
+		}
+		return objectives;
+	}
+
+	private async loadObjectiveSummariesForPeriod(
+		period: string,
+		loadVersion: number,
+	): Promise<Objective[]> {
+		const failures: string[] = [];
+		const parsed = await Promise.all(
+			this.getObjectiveFiles(period).map(async (file): Promise<Objective | null> => {
 				try {
 					const frontmatter = await this.parser.readFrontmatter(file);
 					if (
@@ -723,37 +830,44 @@ export class OKRManager {
 					) {
 						return null;
 					}
-
-					const content = await this.app.vault.read(file);
 					const objective = this.normalizeObjective(
-						this.parser.parseObjective(file, frontmatter, content),
+						this.parser.parseObjective(file, frontmatter),
 					);
-					return objective;
-				} catch {
+					this.assertObjectiveMatchesPeriod(objective, period);
+					const summary: Objective = {
+						...objective,
+						keyResults: objective.keyResults.map((keyResult) => ({
+							...keyResult,
+							checkIns: [] as CheckIn[],
+						})),
+					};
+					return summary;
+				} catch (error) {
+					const message =
+						error instanceof Error ? error.message : this.t("errors.unknown");
+					failures.push(`${file.path}: ${message}`);
 					return null;
 				}
 			}),
 		);
+		if (failures.length > 0) {
+			throw new Error(
+				this.t("errors.invalidObjectiveFiles", {
+					files: failures.join("; "),
+				}),
+			);
+		}
 
 		const objectives = parsed
 			.filter((item): item is Objective => item !== null)
 			.sort((left, right) => compareObjectiveIds(left.id, right.id));
-		const entry = this.ensureCacheEntry(period);
-		entry.objectives = objectives;
-		entry.keyResultsByObjective = new Map(
-			objectives.map((objective) => [objective.id, objective.keyResults]),
-		);
-		const allKeyResults: KeyResult[] = [];
-		const checkIns = new Map<string, CheckIn[]>();
-		for (const objective of objectives) {
-			for (const keyResult of objective.keyResults) {
-				allKeyResults.push(keyResult);
-				checkIns.set(keyResult.id, keyResult.checkIns);
-			}
+		this.assertUniqueObjectiveIds(objectives);
+		if (loadVersion === this.cacheVersion) {
+			this.summaryCache.set(
+				period,
+				this.buildPeriodCacheEntry(objectives),
+			);
 		}
-		entry.allKeyResults = allKeyResults;
-		entry.checkIns = checkIns;
-		entry.timestamp = Date.now();
 		return objectives;
 	}
 
@@ -790,7 +904,7 @@ export class OKRManager {
 		period: string,
 	): Promise<ObjectiveLookupResult | null> {
 		const normalizedPeriod = this.normalizePeriod(period);
-		const objectives = await this.getObjectives(normalizedPeriod);
+		const objectives = await this.getObjectiveSummaries(normalizedPeriod);
 		const objective = objectives.find((item) => item.id === objectiveId);
 		if (!objective) {
 			return null;
@@ -809,7 +923,7 @@ export class OKRManager {
 		period?: string,
 	): Promise<ObjectiveLookupResult | null> {
 		if (period) {
-			const objectives = await this.getObjectives(period);
+			const objectives = await this.getObjectiveSummaries(period);
 			const objective = objectives.find((item) =>
 				item.keyResults.some((keyResult) => keyResult.id === krId),
 			);
@@ -848,19 +962,54 @@ export class OKRManager {
 		return candidate instanceof TFile ? candidate : null;
 	}
 
-	private async writeObjective(
+	private async mutateObjective(
 		file: TFile,
+		mutation: (current: Objective) => Objective,
+	): Promise<Objective> {
+		const path = file.path;
+		const previous = this.mutationQueues.get(path) ?? Promise.resolve();
+		let release!: () => void;
+		const current = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const queue = previous.catch(() => undefined).then(() => current);
+		this.mutationQueues.set(path, queue);
+		await previous.catch(() => undefined);
+
+		try {
+			let updated: Objective | null = null;
+			await this.app.vault.process(file, (content) => {
+				const latest = this.normalizeObjective(
+					this.parser.parseObjectiveContent(file, content),
+				);
+				updated = this.normalizeObjective(mutation(latest));
+				return this.buildUpdatedObjectiveContent(content, updated);
+			});
+			const result = updated as Objective | null;
+			if (!result) {
+				throw new Error(this.t("errors.objectiveNotFound", { id: file.path }));
+			}
+			this.upsertObjectiveInCaches(result);
+			return result;
+		} finally {
+			release();
+			if (this.mutationQueues.get(path) === queue) {
+				this.mutationQueues.delete(path);
+			}
+		}
+	}
+
+	private buildUpdatedObjectiveContent(
+		content: string,
 		objective: Objective,
-	): Promise<void> {
+	): string {
 		const frontmatter = {
 			[FRONTMATTER_OKR_TYPE]: OKR_TYPE_OBJECTIVE,
 			...this.parser.buildObjectiveFrontmatter(objective),
 			[FRONTMATTER_TAGS]: ["okr", "objective"],
 		};
-		await this.app.vault.process(file, (content) => {
-			const body = this.parser.syncCheckInsMarkdown(content, objective);
-			return `---\n${stringifyYaml(frontmatter).trim()}\n---\n\n${body.trimStart()}`;
-		});
+		const body = this.parser.syncCheckInsMarkdown(content, objective);
+		return `---\n${stringifyYaml(frontmatter).trim()}\n---\n\n${body.trimStart()}`;
 	}
 
 	private getObjectiveFiles(period: string): TFile[] {
@@ -874,35 +1023,125 @@ export class OKRManager {
 		return collectMarkdownFilesFromTree(periodFolder) as TFile[];
 	}
 
-	private getValidCache(period: string): PeriodCacheEntry | null {
-		const entry = this.cache.get(period);
+	private getValidCache(
+		period: string,
+		cache: Map<string, PeriodCacheEntry> = this.cache,
+	): PeriodCacheEntry | null {
+		const entry = cache.get(period);
 		if (!entry) {
 			return null;
 		}
 
 		if (Date.now() - entry.timestamp > this.CACHE_TTL) {
-			this.cache.delete(period);
+			cache.delete(period);
 			return null;
 		}
 
 		return entry;
 	}
 
-	private ensureCacheEntry(period: string): PeriodCacheEntry {
-		const existing = this.cache.get(period);
-		if (existing) {
-			return existing;
+	private invalidatePeriodCaches(period: string): void {
+		this.cacheVersion += 1;
+		this.cache.delete(period);
+		this.summaryCache.delete(period);
+	}
+
+	private upsertObjectiveInCaches(objective: Objective): void {
+		this.cacheVersion += 1;
+		this.upsertObjectiveInCache(this.cache, objective, false);
+		this.upsertObjectiveInCache(this.summaryCache, objective, true);
+	}
+
+	private upsertObjectiveInCache(
+		cache: Map<string, PeriodCacheEntry>,
+		objective: Objective,
+		stripCheckIns: boolean,
+	): void {
+		const entry = cache.get(objective.period);
+		if (!entry) {
+			return;
 		}
 
-		const created: PeriodCacheEntry = {
-			objectives: [],
-			keyResultsByObjective: new Map(),
-			allKeyResults: [],
-			checkIns: new Map(),
-			timestamp: 0,
+		const replacement: Objective = stripCheckIns
+			? {
+					...objective,
+					keyResults: objective.keyResults.map((keyResult) => ({
+						...keyResult,
+						checkIns: [],
+					})),
+				}
+			: objective;
+		const objectives = entry.objectives.filter(
+			(item) => item.filePath !== objective.filePath && item.id !== objective.id,
+		);
+		objectives.push(replacement);
+		objectives.sort((left, right) => compareObjectiveIds(left.id, right.id));
+		entry.objectives = objectives;
+		entry.keyResultsByObjective = new Map(
+			objectives.map((item) => [item.id, item.keyResults]),
+		);
+		entry.allKeyResults = objectives.flatMap((item) => item.keyResults);
+		entry.checkIns = new Map(
+			entry.allKeyResults.map((keyResult) => [
+				keyResult.id,
+				keyResult.checkIns,
+			]),
+		);
+		entry.timestamp = Date.now();
+	}
+
+	private buildPeriodCacheEntry(objectives: Objective[]): PeriodCacheEntry {
+		const allKeyResults = objectives.flatMap(
+			(objective) => objective.keyResults,
+		);
+		return {
+			objectives,
+			keyResultsByObjective: new Map(
+				objectives.map((objective) => [objective.id, objective.keyResults]),
+			),
+			allKeyResults,
+			checkIns: new Map(
+				allKeyResults.map((keyResult) => [
+					keyResult.id,
+					keyResult.checkIns,
+				]),
+			),
+			timestamp: Date.now(),
 		};
-		this.cache.set(period, created);
-		return created;
+	}
+
+	private assertObjectiveMatchesPeriod(
+		objective: Objective,
+		expectedPeriod: string,
+	): void {
+		if (objective.period !== expectedPeriod) {
+			throw new Error(
+				this.t("errors.objectivePeriodMismatch", {
+					actual: objective.period,
+					expected: expectedPeriod,
+				}),
+			);
+		}
+	}
+
+	private assertUniqueObjectiveIds(objectives: Objective[]): void {
+		const pathsById = new Map<string, string[]>();
+		for (const objective of objectives) {
+			const paths = pathsById.get(objective.id) ?? [];
+			paths.push(objective.filePath);
+			pathsById.set(objective.id, paths);
+		}
+
+		for (const [id, paths] of pathsById) {
+			if (paths.length > 1) {
+				throw new Error(
+					this.t("errors.duplicateObjectiveId", {
+						id,
+						files: paths.join(", "),
+					}),
+				);
+			}
+		}
 	}
 
 	private async ensureFolder(path: string): Promise<void> {
@@ -942,9 +1181,7 @@ export class OKRManager {
 			return 0;
 		}
 
-		return Math.round(
-			(this.parser.clampProgress(progress) / 100) * keyResult.target,
-		);
+		return (this.parser.clampProgress(progress) / 100) * keyResult.target;
 	}
 
 	private normalizePeriod(

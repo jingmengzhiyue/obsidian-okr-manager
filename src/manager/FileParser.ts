@@ -45,15 +45,43 @@ export class FileParser {
 			return cache.frontmatter;
 		}
 		const content = await this.app.vault.read(file);
-		const match = content.match(/^---\n([\s\S]*?)\n---/);
-		if (match && match[1]) {
+		return this.parseFrontmatterContent(content, file.path);
+	}
+
+	parseFrontmatterContent(
+		content: string,
+		sourcePath = "",
+	): Record<string, unknown> {
+		const frontmatterText = this.extractFrontmatterText(content);
+		if (frontmatterText) {
 			try {
-				return parseYaml(match[1]) as Record<string, unknown>;
-			} catch {
-				return {};
+				const parsed = parseYaml(frontmatterText) as unknown;
+				if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+					throw new Error("frontmatter must be a YAML mapping");
+				}
+				return parsed as Record<string, unknown>;
+			} catch (error) {
+				const location = sourcePath ? ` in ${sourcePath}` : "";
+				const message = error instanceof Error ? error.message : "invalid YAML";
+				throw new Error(`Invalid frontmatter${location}: ${message}`);
 			}
 		}
 		return {};
+	}
+
+	private extractFrontmatterText(content: string): string | null {
+		const match = content.match(
+			/^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?=\r?\n|$)/,
+		);
+		return match?.[1] ?? null;
+	}
+
+	parseObjectiveContent(file: TFile, content: string): Objective {
+		return this.parseObjective(
+			file,
+			this.parseFrontmatterContent(content, file.path),
+			content,
+		);
 	}
 
 	async writeFrontmatter(
@@ -62,11 +90,11 @@ export class FileParser {
 	): Promise<void> {
 		await this.app.vault.process(file, (content) => {
 			const fm = stringifyYaml(data).trim();
-			if (content.startsWith("---")) {
-				const end = content.indexOf("\n---", 3);
-				if (end !== -1) {
-					return `---\n${fm}\n---${content.slice(end + 4)}`;
-				}
+			const existing = content.match(
+				/^---[ \t]*\r?\n[\s\S]*?\r?\n---[ \t]*(?=\r?\n|$)/,
+			);
+			if (existing) {
+				return `---\n${fm}\n---${content.slice(existing[0].length)}`;
 			}
 			return `---\n${fm}\n---\n\n${content}`;
 		});
@@ -83,6 +111,9 @@ export class FileParser {
 			fm[FRONTMATTER_OKR_PERIOD_TYPE],
 			period,
 		);
+		if (!this.isValidPeriod(period, periodType)) {
+			throw new Error(`Invalid OKR period in ${file.path}: ${period || "(empty)"}`);
+		}
 		const checkInsByKrId = this.parseMarkdownCheckIns(content);
 
 		return {
@@ -111,17 +142,25 @@ export class FileParser {
 
 	syncCheckInsMarkdown(content: string, objective: Objective): string {
 		const body = this.stripFrontmatter(content).trimEnd();
-		const section = this.buildCheckInsMarkdown(objective);
-		const sectionPattern = new RegExp(
-			`(?:\\r?\\n)*## 进度记录(?:\\r?\\n){2}${this.escapeRegExp(OKR_CHECKINS_START)}[\\s\\S]*?${this.escapeRegExp(OKR_CHECKINS_END)}(?:\\r?\\n)*`,
-			"m",
+		const block = this.buildCheckInsBlock(objective);
+		const blockPattern = new RegExp(
+			`${this.escapeRegExp(OKR_CHECKINS_START)}[\\s\\S]*?${this.escapeRegExp(OKR_CHECKINS_END)}`,
+			"g",
 		);
+		let replaced = false;
+		const synchronized = body.replace(blockPattern, () => {
+			if (replaced) {
+				return "";
+			}
 
-		if (sectionPattern.test(body)) {
-			return body.replace(sectionPattern, `\n\n${section}\n`);
+			replaced = true;
+			return block;
+		});
+		if (replaced) {
+			return `${synchronized.trimEnd()}\n`;
 		}
 
-		return `${body}\n\n${section}\n`;
+		return `${body}\n\n${this.buildCheckInsMarkdown(objective)}\n`;
 	}
 
 	generateObjectiveFileName(id: string): string {
@@ -134,28 +173,41 @@ export class FileParser {
 	}
 
 	getDefaultDue(periodType: OKRPeriodType): string {
-		const now = new Date();
-		const endDate = new Date(now);
-		switch (periodType) {
-			case "week": {
-				const day = now.getDay() || 7;
-				endDate.setDate(now.getDate() + (7 - day));
-				break;
-			}
-			case "month":
-				endDate.setMonth(now.getMonth() + 1, 0);
-				break;
-			case "quarter": {
-				const quarter = Math.ceil((now.getMonth() + 1) / 3);
-				endDate.setMonth(quarter * 3, 0);
-				break;
-			}
-			case "year":
-				endDate.setMonth(11, 31);
-				break;
+		return (
+			this.getDueForPeriod(this.getCurrentPeriod(periodType), periodType) ??
+			formatLocalDate(new Date())
+		);
+	}
+
+	getDueForPeriod(period: string, periodType: OKRPeriodType): string | null {
+		if (!this.isValidPeriod(period, periodType)) {
+			return null;
 		}
 
-		return formatLocalDate(endDate);
+		switch (periodType) {
+			case "week": {
+				const [yearText, weekText] = period.split("-W");
+				const year = Number(yearText);
+				const week = Number(weekText);
+				const januaryFourth = new Date(year, 0, 4);
+				const januaryFourthDay = januaryFourth.getDay() || 7;
+				const sunday = new Date(year, 0, 4 - (januaryFourthDay - 1));
+				sunday.setDate(sunday.getDate() + (week - 1) * 7 + 6);
+				return formatLocalDate(sunday);
+			}
+			case "month": {
+				const [yearText, monthText] = period.split("-");
+				return formatLocalDate(new Date(Number(yearText), Number(monthText), 0));
+			}
+			case "quarter": {
+				const [yearText, quarterText] = period.split("-Q");
+				return formatLocalDate(
+					new Date(Number(yearText), Number(quarterText) * 3, 0),
+				);
+			}
+			case "year":
+				return formatLocalDate(new Date(Number(period), 11, 31));
+		}
 	}
 
 	formatPeriodLabel(
@@ -197,8 +249,16 @@ export class FileParser {
 	isValidPeriod(period: string, periodType: OKRPeriodType): boolean {
 		const value = period.trim();
 		switch (periodType) {
-			case "week":
-				return WEEK_PERIOD_PATTERN.test(value);
+			case "week": {
+				if (!WEEK_PERIOD_PATTERN.test(value)) {
+					return false;
+				}
+				const [yearText, weekText] = value.split("-W");
+				const lastIsoWeek = this.getIsoWeekParts(
+					new Date(Number(yearText), 11, 28),
+				).week;
+				return Number(weekText) <= lastIsoWeek;
+			}
 			case "month":
 				return MONTH_PERIOD_PATTERN.test(value);
 			case "quarter":
@@ -215,19 +275,25 @@ export class FileParser {
 				const [yearText, weekText] = period.split("-W");
 				const year = Number(yearText);
 				const week = Number(weekText);
-				return year * 100 + week;
+				const januaryFourth = new Date(Date.UTC(year, 0, 4));
+				const day = januaryFourth.getUTCDay() || 7;
+				return Date.UTC(year, 0, 4 - (day - 1) + (week - 1) * 7);
 			}
 			case "month": {
 				const [yearText, monthText] = period.split("-");
-				return Number(yearText) * 100 + Number(monthText);
+				return Date.UTC(Number(yearText), Number(monthText) - 1, 1);
 			}
 			case "quarter": {
 				const [yearText, quarterText] = period.split("-Q");
-				return Number(yearText) * 100 + Number(quarterText) * 3;
+				return Date.UTC(
+					Number(yearText),
+					(Number(quarterText) - 1) * 3,
+					1,
+				);
 			}
 			case "year":
 			default:
-				return Number(period) * 100;
+				return Date.UTC(Number(period), 0, 1);
 		}
 	}
 
@@ -324,12 +390,18 @@ export class FileParser {
 
 	private parseObjectiveId(value: unknown): string {
 		const id = this.parseString(value);
-		return OBJECTIVE_ID_PATTERN.test(id) ? id : "";
+		if (!OBJECTIVE_ID_PATTERN.test(id)) {
+			throw new Error(`Invalid Objective ID: ${id || "(empty)"}`);
+		}
+		return id;
 	}
 
 	private parseKeyResultId(value: unknown): string {
 		const id = this.parseString(value);
-		return KEY_RESULT_ID_PATTERN.test(id) ? id : "";
+		if (!KEY_RESULT_ID_PATTERN.test(id)) {
+			throw new Error(`Invalid Key Result ID: ${id || "(empty)"}`);
+		}
+		return id;
 	}
 
 	private parseKeyResults(
@@ -346,12 +418,17 @@ export class FileParser {
 			return [];
 		}
 
-		return value
-			.map((item, index) =>
-				this.parseKeyResultEntry(item, context, index),
-			)
-			.filter((item): item is KeyResult => item !== null)
+		const parsed = value
+			.map((item, index) => this.parseKeyResultEntry(item, context, index))
 			.sort((left, right) => left.order - right.order);
+		const ids = new Set<string>();
+		for (const keyResult of parsed) {
+			if (ids.has(keyResult.id)) {
+				throw new Error(`Duplicate Key Result ID: ${keyResult.id}`);
+			}
+			ids.add(keyResult.id);
+		}
+		return parsed;
 	}
 
 	private parseString(value: unknown, fallback = ""): string {
@@ -386,12 +463,14 @@ export class FileParser {
 			.replace(/\s+/g, " ");
 	}
 
-	private formatDateToPeriod(date: Date, periodType: OKRPeriodType): string {
+	formatDateToPeriod(date: Date, periodType: OKRPeriodType): string {
 		const year = date.getFullYear();
 		const month = date.getMonth() + 1;
 		switch (periodType) {
-			case "week":
-				return `${year}-W${String(this.getIsoWeek(date)).padStart(2, "0")}`;
+			case "week": {
+				const isoWeek = this.getIsoWeekParts(date);
+				return `${isoWeek.year}-W${String(isoWeek.week).padStart(2, "0")}`;
+			}
 			case "month":
 				return `${year}-${String(month).padStart(2, "0")}`;
 			case "quarter":
@@ -402,16 +481,19 @@ export class FileParser {
 		}
 	}
 
-	private getIsoWeek(date: Date): number {
+	private getIsoWeekParts(date: Date): { year: number; week: number } {
 		const target = new Date(
 			Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()),
 		);
 		const dayNumber = target.getUTCDay() || 7;
 		target.setUTCDate(target.getUTCDate() + 4 - dayNumber);
 		const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1));
-		return Math.ceil(
-			((target.getTime() - yearStart.getTime()) / 86400000 + 1) / 7,
-		);
+		return {
+			year: target.getUTCFullYear(),
+			week: Math.ceil(
+				((target.getTime() - yearStart.getTime()) / 86400000 + 1) / 7,
+			),
+		};
 	}
 
 	private parseKeyResultEntry(
@@ -424,9 +506,11 @@ export class FileParser {
 			checkInsByKrId: Map<string, CheckIn[]>;
 		},
 		index: number,
-	): KeyResult | null {
+	): KeyResult {
 		if (!value || typeof value !== "object") {
-			return null;
+			throw new Error(
+				`Invalid Key Result entry at index ${index} in ${context.filePath}`,
+			);
 		}
 
 		const record = value as Record<string, unknown>;
@@ -435,9 +519,12 @@ export class FileParser {
 		const order = Number.isFinite(parsedOrder)
 			? Math.max(0, Math.floor(parsedOrder))
 			: fallbackOrder;
-		const fallbackId = `${context.objectiveId}-KR${index + 1}`;
-		const id =
-			this.parseKeyResultId(record[FRONTMATTER_OKR_ID]) || fallbackId;
+		const id = this.parseKeyResultId(record[FRONTMATTER_OKR_ID]);
+		if (!id.startsWith(`${context.objectiveId}-KR`)) {
+			throw new Error(
+				`Key Result ID ${id} does not belong to Objective ${context.objectiveId}`,
+			);
+		}
 		const current = this.parseNumber(record[FRONTMATTER_CURRENT]);
 		const target = this.parseNumber(record[FRONTMATTER_TARGET]);
 		const unit = this.parseUnit(record[FRONTMATTER_UNIT]);
@@ -527,20 +614,35 @@ export class FileParser {
 
 	private parseMarkdownCheckIns(content: string): Map<string, CheckIn[]> {
 		const result = new Map<string, CheckIn[]>();
-		const match = content.match(
-			new RegExp(
-				`${this.escapeRegExp(OKR_CHECKINS_START)}([\\s\\S]*?)${this.escapeRegExp(OKR_CHECKINS_END)}`,
-				"m",
-			),
+		const blockPattern = new RegExp(
+			`${this.escapeRegExp(OKR_CHECKINS_START)}([\\s\\S]*?)${this.escapeRegExp(OKR_CHECKINS_END)}`,
+			"gm",
 		);
-		if (!match?.[1]) {
-			return result;
+		for (const match of content.matchAll(blockPattern)) {
+			if (match[1]) {
+				this.parseMarkdownCheckInBlock(match[1], result);
+			}
 		}
 
+		for (const [krId, checkIns] of result) {
+			result.set(
+				krId,
+				checkIns.sort((left, right) =>
+					right.recordedAt.localeCompare(left.recordedAt),
+				),
+			);
+		}
+		return result;
+	}
+
+	private parseMarkdownCheckInBlock(
+		block: string,
+		result: Map<string, CheckIn[]>,
+	): void {
 		let currentKrId = "";
 		let current: CheckIn | null = null;
-		for (const line of match[1].split(/\r?\n/)) {
-			const heading = line.match(/^###\s+(O\d+-KR\d+)\s+进度记录\s*$/);
+		for (const line of block.split(/\r?\n/)) {
+			const heading = line.match(/^###\s+(O\d+-KR\d+)(?:\s+.*)?$/);
 			if (heading?.[1]) {
 				currentKrId = heading[1];
 				current = null;
@@ -555,9 +657,7 @@ export class FileParser {
 					id: entry[4] ?? `${currentKrId}-${result.size + 1}`,
 					krId: currentKrId,
 					date: entry[1] ?? "",
-					progress: this.clampProgress(
-						this.parseNumber(entry[2]),
-					),
+					progress: this.clampProgress(this.parseNumber(entry[2])),
 					delta: this.parseNumber(entry[3]),
 					note: "",
 					blocker: "",
@@ -573,9 +673,7 @@ export class FileParser {
 
 			const recordedAt = line.match(/^[ ]{2}- recordedAt:\s*(.*)$/);
 			if (recordedAt) {
-				current.recordedAt = this.decodeMarkdownValue(
-					recordedAt[1] ?? "",
-				);
+				current.recordedAt = this.decodeMarkdownValue(recordedAt[1] ?? "");
 				continue;
 			}
 
@@ -590,20 +688,14 @@ export class FileParser {
 				current.blocker = this.decodeMarkdownValue(blocker[1] ?? "");
 			}
 		}
-
-		for (const [krId, checkIns] of result) {
-			result.set(
-				krId,
-				checkIns.sort((left, right) =>
-					right.recordedAt.localeCompare(left.recordedAt),
-				),
-			);
-		}
-		return result;
 	}
 
 	private buildCheckInsMarkdown(objective: Objective): string {
-		const lines = ["## 进度记录", "", OKR_CHECKINS_START];
+		return `## 进度记录\n\n${this.buildCheckInsBlock(objective)}`;
+	}
+
+	private buildCheckInsBlock(objective: Objective): string {
+		const lines = [OKR_CHECKINS_START];
 		let hasCheckIns = false;
 		for (const keyResult of objective.keyResults) {
 			if (keyResult.checkIns.length === 0) {
@@ -639,7 +731,12 @@ export class FileParser {
 		checkIn: CheckIn,
 	): void {
 		const existing = checkInsByKrId.get(checkIn.krId) ?? [];
-		existing.push(checkIn);
+		const duplicateIndex = existing.findIndex((item) => item.id === checkIn.id);
+		if (duplicateIndex === -1) {
+			existing.push(checkIn);
+		} else {
+			existing[duplicateIndex] = checkIn;
+		}
 		checkInsByKrId.set(checkIn.krId, existing);
 	}
 
@@ -663,22 +760,30 @@ export class FileParser {
 	}
 
 	private stripFrontmatter(content: string): string {
-		if (!content.startsWith("---")) {
+		const match = content.match(
+			/^---[ \t]*\r?\n[\s\S]*?\r?\n---[ \t]*(?=\r?\n|$)/,
+		);
+		if (!match) {
 			return content;
 		}
-		const end = content.indexOf("\n---", 3);
-		if (end === -1) {
-			return content;
-		}
-		return content.slice(end + 4).replace(/^\r?\n/, "");
+		return content.slice(match[0].length).replace(/^\r?\n/, "");
 	}
 
 	private encodeMarkdownValue(value: string): string {
-		return value.replace(/\r?\n/g, "<br>");
+		return value
+			.replace(/&/g, "&amp;")
+			.replace(/</g, "&lt;")
+			.replace(/>/g, "&gt;")
+			.replace(/\r?\n/g, "<br>");
 	}
 
 	private decodeMarkdownValue(value: string): string {
-		return value.replace(/<br>/g, "\n").trim();
+		return value
+			.replace(/<br>/g, "\n")
+			.replace(/&gt;/g, ">")
+			.replace(/&lt;/g, "<")
+			.replace(/&amp;/g, "&")
+			.trim();
 	}
 
 	private escapeRegExp(value: string): string {

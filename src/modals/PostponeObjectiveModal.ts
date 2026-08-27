@@ -2,6 +2,7 @@ import { App, Modal, Notice } from "obsidian";
 import { type TranslationValue } from "../i18n";
 import { OKRManager } from "../manager/OKRManager";
 import { Objective } from "../types";
+import { isValidPostponeDate } from "../utils/validation";
 
 interface PostponeObjectiveModalOptions {
 	onComplete?: () => void;
@@ -10,7 +11,7 @@ interface PostponeObjectiveModalOptions {
 export class PostponeObjectiveModal extends Modal {
 	private due: string;
 	private isSubmitting = false;
-	private validate!: () => void;
+	private validate!: () => boolean;
 
 	constructor(
 		app: App,
@@ -93,10 +94,11 @@ export class PostponeObjectiveModal extends Modal {
 		});
 
 		this.validate = () => {
-			confirmBtn.disabled =
-				this.isSubmitting ||
-				this.due.length === 0 ||
-				this.due === this.objective.due;
+			const valid =
+				!this.isSubmitting &&
+				isValidPostponeDate(this.objective.due, this.due);
+			confirmBtn.disabled = !valid;
+			return valid;
 		};
 		this.validate();
 		dueInput.focus();
@@ -108,12 +110,7 @@ export class PostponeObjectiveModal extends Modal {
 	}
 
 	private async submit(): Promise<void> {
-		this.validate();
-		if (
-			this.isSubmitting ||
-			this.due.length === 0 ||
-			this.due === this.objective.due
-		) {
+		if (this.isSubmitting || !this.validate()) {
 			return;
 		}
 

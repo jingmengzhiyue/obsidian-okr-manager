@@ -6,7 +6,7 @@
 
 ![Obsidian](https://img.shields.io/badge/Obsidian-%3E%3D1.7.2-blueviolet)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Version](https://img.shields.io/badge/version-1.2.1-blue)
+![Version](https://img.shields.io/badge/version-1.2.2-blue)
 
 [English README](./README.md) · [功能特性](#功能特性) · [安装方法](#安装方法) · [快速开始](#快速开始) · [使用说明](#使用说明) · [常见问题](#常见问题)
 
@@ -144,6 +144,10 @@ Vault OKR Manager 是一个 Obsidian 社区插件，用于在你的 Vault 中管
 5. 保存更新。
 
 进度历史会追加到 Objective 文件正文的 `## 进度记录` 区域，因此同一天也可以多次记录，不会额外生成文件。
+
+启用自动计算时，最后编辑“当前值”会按 `current / target` 计算进度；最后编辑“进度百分比”则会保留输入的百分比，并反推出精确当前值，不会先把当前值取整。关闭自动计算后，当前值和进度百分比会分别保存。
+
+Boolean 类型的关键结果使用离散值：当前值只能是 `0` 或 `1`，目标值必须是 `1`，Check-in 进度只能是 `0%` 或 `100%`。
 
 ### 5. 打开 Dashboard
 
@@ -294,7 +298,7 @@ Objective 进度：
 
 如果你过去使用过旧原型，需要手动将独立文件整理到当前的 Objective 聚合结构中。
 
-如果你已经有旧版 Objective 文件，并且进度历史还保存在 frontmatter 的 `checkIns` 数组里，1.2.1 会继续读取这些旧数据。你可以执行 **Migrate legacy progress records** 一次性迁移当前 OKR 目录下的旧记录；也可以等下次通过插件记录进度、编辑 KR、调整排序或更新目标时，让插件自动把对应文件的旧 `checkIns` 转换为正文 `## 进度记录` 区域，并从 frontmatter 中移除历史数组。
+如果你已经有旧版 Objective 文件，并且进度历史还保存在 frontmatter 的 `checkIns` 数组里，1.2.2 会继续读取这些旧数据。你可以执行 **Migrate legacy progress records** 一次性迁移当前 OKR 目录下的旧记录；也可以等下次通过插件记录进度、编辑 KR、调整排序或更新目标时，让插件自动把对应文件的旧 `checkIns` 转换为正文 `## 进度记录` 区域，并从 frontmatter 中移除历史数组。
 
 ## 常见问题
 
@@ -335,7 +339,8 @@ Dashboard 会显示超期提醒和状态标识，你也可以直接从界面里�
 - [x] 在行内操作后立即刷新当前 Markdown 预览，包括记录进度、编辑、删除、新增 KR、延期等操作
 - [x] 减少由弹窗回调和元数据事件同时触发的重复 Dashboard 刷新
 - [x] 将 Objective 文件发现逻辑从全 Vault 扫描改为仅在已配置 OKR 根目录下查找
-- [ ] 为 KR 建立快速索引，避免记录进度和定位目标时跨周期扫描
+- [x] 为 Dashboard、详情视图和进度选择器增加 frontmatter 摘要缓存，避免读取全部进度历史正文
+- [ ] 为未提供周期的 API 建立 KR 到 Objective 的快速索引，避免跨周期扫描
 
 ### P1：OKR 核心流程完善
 

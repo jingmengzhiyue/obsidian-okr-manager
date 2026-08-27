@@ -39,7 +39,7 @@ export function getObjectiveDeadlineState(
 		};
 	}
 
-	if (objective.status === "completed") {
+	if (objective.status === "completed" || objective.status === "cancelled") {
 		return {
 			tone: "normal",
 			label: i18n.t("objectiveStatus.dueDate", { due }),
