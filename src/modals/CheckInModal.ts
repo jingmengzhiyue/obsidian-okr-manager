@@ -65,7 +65,7 @@ export class CheckInModal extends Modal {
 			const selected = this.findSelectedKR();
 			this.period = selected?.period ?? this.period;
 		}
-		if (!this.krId && this.krs.length > 0) {
+		if (!this.findSelectedKR() && this.krs.length > 0) {
 			const first = this.krs[0];
 			this.krId = first?.id ?? "";
 			this.period = first?.period ?? "";
@@ -125,7 +125,7 @@ export class CheckInModal extends Modal {
 			type: "number",
 			placeholder: "0",
 		});
-		const currentError = currentField.createEl("div", {
+		const currentError = currentField.createDiv({
 			cls: "okr-input-error",
 			text: this.t("modals.checkIn.currentError"),
 		});
@@ -172,7 +172,7 @@ export class CheckInModal extends Modal {
 		progressInput.setAttribute("min", "0");
 		progressInput.setAttribute("max", "100");
 		progressInput.value = String(this.progress);
-		const progressError = progressField.createEl("div", {
+		const progressError = progressField.createDiv({
 			cls: "okr-input-error",
 			text: this.t("modals.checkIn.progressError"),
 		});
@@ -215,7 +215,7 @@ export class CheckInModal extends Modal {
 		slider.setAttribute("max", "100");
 		slider.setAttribute("step", "1");
 		slider.value = String(this.progress);
-		const sliderVal = sliderRow.createEl("span", {
+		const sliderVal = sliderRow.createSpan({
 			cls: "okr-slider-value",
 			text: `${this.progress}%`,
 		});
@@ -381,7 +381,13 @@ export class CheckInModal extends Modal {
 	}
 
 	private async loadAllKeyResults(): Promise<KeyResult[]> {
-		return this.manager.getAllKeyResultSummaries();
+		const writablePeriods = await this.manager.getWritablePeriods();
+		const nested = await Promise.all(
+			writablePeriods.map((period) =>
+				this.manager.getAllKeyResultSummaries(period),
+			),
+		);
+		return nested.flat();
 	}
 
 	private syncSelectedKRValues(): void {
@@ -458,7 +464,7 @@ export class CheckInModal extends Modal {
 	private createRequiredLabel(container: HTMLElement, text: string): void {
 		const label = container.createEl("label", { cls: "okr-label" });
 		label.appendText(text);
-		label.createEl("span", { cls: "okr-required", text: "*" });
+		label.createSpan({ cls: "okr-required", text: "*" });
 	}
 
 	private t(

@@ -35,7 +35,7 @@ export class PostponeObjectiveModal extends Modal {
 				id: this.objective.id,
 			}),
 		});
-		contentEl.createEl("div", {
+		contentEl.createDiv({
 			cls: "okr-modal-subtitle",
 			text: this.objective.due
 				? this.t("modals.postpone.currentDueDate", {
@@ -71,7 +71,7 @@ export class PostponeObjectiveModal extends Modal {
 			this.validate();
 		});
 
-		const hint = dueField.createEl("div", {
+		const hint = dueField.createDiv({
 			cls: "okr-input-hint",
 			text: this.t("modals.postpone.hint"),
 		});

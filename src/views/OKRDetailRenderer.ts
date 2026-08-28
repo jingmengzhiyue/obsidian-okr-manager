@@ -50,7 +50,9 @@ export class OKRDetailRenderer {
 				const objId = String(fm[FRONTMATTER_OKR_ID] ?? "");
 				const period = String(fm[FRONTMATTER_OKR_PERIOD] ?? "");
 				let objective: Objective | undefined;
+				let writable = true;
 				try {
+					writable = (await manager.getPeriodInfo(period)).status === "open";
 					objective = (await manager.getObjectiveSummaries(period)).find(
 						(item) => item.id === objId,
 					);
@@ -75,6 +77,7 @@ export class OKRDetailRenderer {
 						keyResults: [],
 					},
 					doc,
+					writable,
 				);
 				this.replaceCommentBlock(
 					el,
@@ -392,15 +395,22 @@ export class OKRDetailRenderer {
 		i18n: I18n,
 		objective: Objective,
 		doc: Document,
+		writable: boolean,
 	): DocumentFragment {
-		const fragment = doc.createDocumentFragment();
+		const fragment = createFragment();
 		const deadlineState = getObjectiveDeadlineState(
 			objective,
 			undefined,
 			i18n,
 		);
 		fragment.appendChild(
-			this.renderObjectiveActionBar(objective, deadlineState, i18n, doc),
+			this.renderObjectiveActionBar(
+				objective,
+				deadlineState,
+				i18n,
+				doc,
+				writable,
+			),
 		);
 		if (deadlineState.tone !== "normal") {
 			fragment.appendChild(
@@ -413,11 +423,11 @@ export class OKRDetailRenderer {
 			);
 		}
 
-		const table = doc.createElement("table");
+		const table = createEl("table");
 		table.className = "okr-inline-kr-table";
 		const thead = table.createEl("thead");
 		const headRow = thead.createEl("tr");
-		for (const header of [
+		const headers = [
 			i18n.t("detail.index"),
 			i18n.t("detail.title"),
 			i18n.t("detail.owner"),
@@ -425,8 +435,11 @@ export class OKRDetailRenderer {
 			i18n.t("detail.progressPercent"),
 			i18n.t("detail.confidence"),
 			i18n.t("detail.dueDate"),
-			i18n.t("detail.actions"),
-		]) {
+		];
+		if (writable) {
+			headers.push(i18n.t("detail.actions"));
+		}
+		for (const header of headers) {
 			headRow.createEl("th", { text: header });
 		}
 
@@ -436,7 +449,7 @@ export class OKRDetailRenderer {
 			const cell = row.createEl("td", {
 				text: i18n.t("detail.emptyKeyResults"),
 			});
-			cell.setAttribute("colspan", "8");
+			cell.setAttribute("colspan", writable ? "8" : "7");
 		} else {
 			objective.keyResults.forEach((kr, index) => {
 				tbody.appendChild(
@@ -446,6 +459,7 @@ export class OKRDetailRenderer {
 						objective.keyResults.length,
 						i18n,
 						doc,
+						writable,
 					),
 				);
 			});
@@ -472,6 +486,7 @@ export class OKRDetailRenderer {
 		total: number,
 		i18n: I18n,
 		doc: Document,
+		writable: boolean,
 	): HTMLTableRowElement {
 		const progressClass =
 			kr.progress >= 80
@@ -479,7 +494,7 @@ export class OKRDetailRenderer {
 				: kr.progress >= 40
 					? "okr-prog-medium"
 					: "okr-prog-low";
-		const row = doc.createElement("tr");
+		const row = createEl("tr");
 		row.createEl("td", { text: String(index) });
 		row.createEl("td", { text: kr.title });
 		row.createEl("td", { text: kr.owner || "-" });
@@ -496,7 +511,7 @@ export class OKRDetailRenderer {
 		row.createEl("td", { text: `${kr.progress}%` });
 
 		const confidenceCell = row.createEl("td");
-		confidenceCell.createEl("span", {
+		confidenceCell.createSpan({
 			cls: `okr-kr-dot okr-conf-${kr.confidence}`,
 			text: "●",
 		});
@@ -504,6 +519,9 @@ export class OKRDetailRenderer {
 
 		row.createEl("td", { text: kr.due || "-" });
 
+		if (!writable) {
+			return row;
+		}
 		const actionCell = row.createEl("td");
 		const actions = actionCell.createDiv("okr-inline-actions");
 		actions.appendChild(
@@ -555,16 +573,17 @@ export class OKRDetailRenderer {
 		deadlineState: ReturnType<typeof getObjectiveDeadlineState>,
 		i18n: I18n,
 		doc: Document,
+		writable: boolean,
 	): HTMLDivElement {
-		const bar = doc.createElement("div");
+		const bar = createDiv();
 		bar.className = "okr-inline-action-bar";
-		const summary = doc.createElement("div");
+		const summary = createDiv();
 		summary.className = "okr-inline-objective-meta";
-		summary.createEl("span", {
+		summary.createSpan({
 			text: deadlineState.helpText ?? deadlineState.label,
 		});
 		if (deadlineState.tone !== "normal") {
-			summary.createEl("span", {
+			summary.createSpan({
 				cls: `okr-badge okr-deadline-badge okr-deadline-${deadlineState.tone}`,
 				text: deadlineState.label,
 			});
@@ -577,6 +596,9 @@ export class OKRDetailRenderer {
 				doc,
 			),
 		);
+		if (!writable) {
+			return bar;
+		}
 		bar.appendChild(
 			this.createActionButton(
 				i18n.t("actions.addKeyResult"),
@@ -633,12 +655,12 @@ export class OKRDetailRenderer {
 		i18n: I18n,
 		doc: Document,
 	): HTMLDivElement {
-		const banner = doc.createElement("div");
+		const banner = createDiv();
 		banner.className = `okr-inline-objective-alert okr-inline-objective-alert-${deadlineState.tone}`;
 		banner.createEl("strong", {
 			text: `${objective.id} ${deadlineState.label}`,
 		});
-		banner.createEl("span", {
+		banner.createSpan({
 			text:
 				deadlineState.helpText ??
 				i18n.t("modals.postpone.hint", { title: objective.title }),
@@ -684,7 +706,7 @@ export class OKRDetailRenderer {
 		doc: Document,
 		dataset: Record<string, string> = {},
 	): HTMLButtonElement {
-		const button = doc.createElement("button");
+		const button = createEl("button");
 		button.className = className;
 		button.type = "button";
 		button.textContent = text;

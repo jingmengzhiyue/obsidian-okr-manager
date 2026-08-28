@@ -6,7 +6,7 @@
 
 ![Obsidian](https://img.shields.io/badge/Obsidian-%3E%3D1.7.2-blueviolet)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Version](https://img.shields.io/badge/version-1.2.2-blue)
+![Version](https://img.shields.io/badge/version-1.3.0-blue)
 
 [English README](./README.md) · [功能特性](#功能特性) · [安装方法](#安装方法) · [快速开始](#快速开始) · [使用说明](#使用说明) · [常见问题](#常见问题)
 
@@ -40,6 +40,9 @@ Vault OKR Manager 是一个 Obsidian 社区插件，用于在你的 Vault 中管
 - 每个 Objective 只保留一个文件，KR 当前状态与进度历史均内嵌存储
 - Dashboard 统一查看各周期目标、关键结果、进度和超期状态
 - 支持周、月、季度、年四种周期
+- 支持周期关闭、重新开启、逻辑归档与只读保护
+- 支持选择性结转未完成 Objective/KR
+- 支持保存在 Markdown 中的周期模板
 - 自动计算 KR 与 Objective 进度
 - 内置进度记录流程，支持同一天多次更新
 - Dashboard 中支持拖拽排序关键结果
@@ -199,6 +202,29 @@ OKR/
 | 季度 | `YYYY-Qn` | `2026-Q2` |
 | 年 | `YYYY` | `2026` |
 
+### 周期关闭、结转、归档与模板
+
+每个周期默认处于 `open`（进行中）状态。Dashboard 的周期菜单可以关闭周期、重新开启周期、在关闭后归档，以及取消归档。关闭或归档的周期仍可查看，但 Manager 会统一拒绝 Objective/KR 的新增、编辑、打卡、排序、延期和删除操作。已归档周期默认隐藏，可通过“显示已归档”查看。
+
+关闭周期时会打开结转向导：默认目标是下一个同类型周期，并默认选择全部未完成 Objective 和 KR；你可以修改目标周期，或逐项取消。结转后的 KR 保留当前值和进度，但状态和日期按新周期重置，检查历史从空白开始。只有全部目标文件创建成功后，源周期才会标记为关闭；中途失败时，本次新建文件会移入回收站。
+
+“保存为模板”会保存所选 Objective/KR 的结构；“周期模板”可以应用或删除模板。模板保留标题、描述、负责人、KR 单位、目标值、信心度和顺序，只能应用到同类型、进行中且没有 Objective 的周期；应用后的当前值和进度从零开始。
+
+生命周期元数据与模板仍使用普通 Markdown 文件：
+
+```text
+OKR/
+├── 2026-Q2/
+│   ├── _period.md
+│   └── O1.md
+└── Templates/
+    └── 季度规划.md
+```
+
+`_period.md` 使用 `okr-type: period`，模板使用 `okr-type: period-template`。没有 `_period.md` 的旧周期目录会继续被视为 `open`，不会批量迁移。归档只修改元数据，不移动目录，因此现有链接和路径不会变化；插件更新状态时也会保留 `_period.md` 中用户自行添加的字段。
+
+降级到 1.3.0 之前的版本后，文件仍可读取，但旧插件会忽略生命周期元数据，无法执行只读保护；它在改写结转目标时还可能丢弃 `rollover-from`。降级前请先备份或提交 Vault。
+
 ### Objective 文件模型
 
 每个 Objective 文件包含：
@@ -298,7 +324,7 @@ Objective 进度：
 
 如果你过去使用过旧原型，需要手动将独立文件整理到当前的 Objective 聚合结构中。
 
-如果你已经有旧版 Objective 文件，并且进度历史还保存在 frontmatter 的 `checkIns` 数组里，1.2.2 会继续读取这些旧数据。你可以执行 **Migrate legacy progress records** 一次性迁移当前 OKR 目录下的旧记录；也可以等下次通过插件记录进度、编辑 KR、调整排序或更新目标时，让插件自动把对应文件的旧 `checkIns` 转换为正文 `## 进度记录` 区域，并从 frontmatter 中移除历史数组。
+如果你已经有旧版 Objective 文件，并且进度历史还保存在 frontmatter 的 `checkIns` 数组里，1.3.0 会继续读取这些旧数据。你可以执行 **Migrate legacy progress records** 一次性迁移当前 OKR 目录中进行中周期的旧记录；关闭和归档周期会被跳过并报告数量。你也可以等下次通过插件记录进度、编辑 KR、调整排序或更新目标时，让插件自动把对应文件的旧 `checkIns` 转换为正文 `## 进度记录` 区域，并从 frontmatter 中移除历史数组。
 
 ## 常见问题
 
@@ -344,7 +370,7 @@ Dashboard 会显示超期提醒和状态标识，你也可以直接从界面里�
 
 ### P1：OKR 核心流程完善
 
-- [ ] 增加周期规划能力，例如模板、未完成事项结转、周期归档与关闭
+- [x] 增加周期规划能力，例如模板、未完成事项结转、周期归档与关闭
 - [ ] 增加结构化评审流程，例如周回顾、中期评审、周期复盘
 - [ ] 为 Dashboard 增加 owner、状态、周期、超期状态等筛选与搜索能力
 - [ ] 丰富 Check-in 内容，支持下一步计划、风险等级、里程碑说明和证据链接

@@ -13,7 +13,10 @@ import { EditObjectiveModal } from "../modals/EditObjectiveModal";
 import { NewKRModal } from "../modals/NewKRModal";
 import { NewObjectiveModal } from "../modals/NewObjectiveModal";
 import { PostponeObjectiveModal } from "../modals/PostponeObjectiveModal";
-import { KeyResult, Objective } from "../types";
+import { ClosePeriodModal } from "../modals/ClosePeriodModal";
+import { PeriodTemplatesModal } from "../modals/PeriodTemplatesModal";
+import { SavePeriodTemplateModal } from "../modals/SavePeriodTemplateModal";
+import { KeyResult, Objective, OKRPeriodInfo } from "../types";
 import {
 	getObjectiveDeadlineState,
 	getObjectiveStatusLabel,
@@ -25,6 +28,8 @@ export const DASHBOARD_VIEW_TYPE = "okr-dashboard";
 export class DashboardView extends ItemView {
 	private currentPeriod: string;
 	private objectives: Objective[] = [];
+	private currentPeriodInfo: OKRPeriodInfo | null = null;
+	private showArchived = false;
 	private krsMap: Map<string, KeyResult[]> = new Map();
 	private renderDebounceTimer: number | null = null;
 	private collapsedObjs = new Set<string>();
@@ -82,18 +87,25 @@ export class DashboardView extends ItemView {
 		container.addClass("okr-dashboard");
 
 		try {
-			const periods = await this.manager.getAllPeriods();
-			if (
-				periods.length > 0 &&
-				(!this.currentPeriod || !periods.includes(this.currentPeriod))
+			const periodInfos = await this.manager.getPeriodInfos({
+				includeArchived: this.showArchived,
+			});
+			const periods = periodInfos.map((info) => info.period);
+			if (periods.length === 0) {
+				this.currentPeriod = "";
+			} else if (
+				!this.currentPeriod ||
+				!periods.includes(this.currentPeriod)
 			) {
 				this.currentPeriod = periods[periods.length - 1] ?? "";
 			}
 
 			await this.refreshData();
-			this.renderToolbar(container, periods);
+			this.renderToolbar(container, periodInfos);
 			this.renderSummaryBar(container);
-			this.renderOverdueReminder(container);
+			if (this.isCurrentPeriodWritable()) {
+				this.renderOverdueReminder(container);
+			}
 			this.renderList(container);
 			this.renderFooter(container);
 		} catch (error) {
@@ -111,29 +123,38 @@ export class DashboardView extends ItemView {
 	private async refreshData(): Promise<void> {
 		if (!this.currentPeriod) {
 			this.objectives = [];
+			this.currentPeriodInfo = null;
 			this.krsMap.clear();
 			return;
 		}
 
-		this.objectives = await this.manager.getObjectiveSummaries(
-			this.currentPeriod,
-		);
+		[this.objectives, this.currentPeriodInfo] = await Promise.all([
+			this.manager.getObjectiveSummaries(this.currentPeriod),
+			this.manager.getPeriodInfo(this.currentPeriod),
+		]);
 		this.krsMap.clear();
 		for (const objective of this.objectives) {
 			this.krsMap.set(objective.id, objective.keyResults);
 		}
 	}
 
-	private renderToolbar(container: HTMLElement, periods: string[]): void {
+	private renderToolbar(container: HTMLElement, periodInfos: OKRPeriodInfo[]): void {
+		const periods = periodInfos.map((info) => info.period);
 		const toolbar = container.createDiv("okr-toolbar");
 		const left = toolbar.createDiv("okr-toolbar-left");
-		left.createEl("span", { cls: "okr-logo", text: "◎" });
-		left.createEl("span", {
+		left.createSpan({ cls: "okr-logo", text: "◎" });
+		left.createSpan({
 			cls: "okr-title",
 			text: this.t("common.okr"),
 		});
 
 		const right = toolbar.createDiv("okr-toolbar-right");
+		if (this.currentPeriodInfo) {
+			right.createSpan({
+				cls: `okr-badge okr-period-status-${this.currentPeriodInfo.status}`,
+				text: this.t(`periodStatus.${this.currentPeriodInfo.status}`),
+			});
+		}
 		const select = right.createEl("select", { cls: "okr-period-select" });
 		if (periods.length === 0) {
 			select.createEl("option", {
@@ -143,11 +164,15 @@ export class DashboardView extends ItemView {
 			select.disabled = true;
 		} else {
 			for (const period of periods) {
+				const info = periodInfos.find((item) => item.period === period);
+				const periodLabel = this.manager
+					.getParser()
+					.formatPeriodLabel(period, undefined, this.manager.getI18n());
 				const option = select.createEl("option", {
 					value: period,
-					text: this.manager
-						.getParser()
-						.formatPeriodLabel(period, undefined, this.manager.getI18n()),
+					text: info
+						? `${periodLabel} · ${this.t(`periodStatus.${info.status}`)}`
+						: periodLabel,
 				});
 				option.selected = period === this.currentPeriod;
 			}
@@ -157,13 +182,36 @@ export class DashboardView extends ItemView {
 			});
 		}
 
-		const addButton = right.createEl("button", {
+		if (this.isCurrentPeriodWritable()) {
+			const addButton = right.createEl("button", {
+				cls: "okr-btn-icon",
+				text: "＋",
+			});
+			addButton.setAttribute("title", this.t("actions.newObjective"));
+			addButton.setAttribute("aria-label", this.t("actions.newObjective"));
+			addButton.addEventListener("click", () => this.openNewObjectiveModal());
+		}
+
+		const periodMenuButton = right.createEl("button", {
 			cls: "okr-btn-icon",
-			text: "＋",
+			text: "⋯",
 		});
-		addButton.setAttribute("title", this.t("actions.newObjective"));
-		addButton.setAttribute("aria-label", this.t("actions.newObjective"));
-		addButton.addEventListener("click", () => this.openNewObjectiveModal());
+		periodMenuButton.setAttribute("aria-label", this.t("actions.periodActions"));
+		periodMenuButton.addEventListener("click", (event) => {
+			this.openPeriodMenu(event);
+		});
+		const archivedLabel = right.createEl("label", {
+			cls: "okr-show-archived",
+		});
+		const archivedCheckbox = archivedLabel.createEl("input", {
+			type: "checkbox",
+		});
+		archivedCheckbox.checked = this.showArchived;
+		archivedCheckbox.addEventListener("change", () => {
+			this.showArchived = archivedCheckbox.checked;
+			this.scheduleRender();
+		});
+		archivedLabel.append(` ${this.t("actions.showArchived")}`);
 	}
 
 	private renderSummaryBar(container: HTMLElement): void {
@@ -210,11 +258,11 @@ export class DashboardView extends ItemView {
 		accent = false,
 	): void {
 		const item = container.createDiv("okr-summary-item");
-		item.createEl("span", {
+		item.createSpan({
 			cls: accent ? "okr-summary-num okr-num-accent" : "okr-summary-num",
 			text: value,
 		});
-		item.createEl("span", { cls: "okr-summary-label", text: label });
+		item.createSpan({ cls: "okr-summary-label", text: label });
 	}
 
 	private renderList(container: HTMLElement): void {
@@ -270,8 +318,8 @@ export class DashboardView extends ItemView {
 			);
 		});
 
-		headerLeft.createEl("span", { cls: "okr-obj-id", text: obj.id });
-		const title = headerLeft.createEl("span", {
+		headerLeft.createSpan({ cls: "okr-obj-id", text: obj.id });
+		const title = headerLeft.createSpan({
 			cls: "okr-obj-title",
 			text: obj.title,
 		});
@@ -283,23 +331,25 @@ export class DashboardView extends ItemView {
 		});
 
 		const headerRight = header.createDiv("okr-obj-header-right");
-		headerRight.createEl("span", {
+		headerRight.createSpan({
 			cls: `okr-badge okr-status-${obj.status}`,
 			text: getObjectiveStatusLabel(obj.status, this.manager.getI18n()),
 		});
-		headerRight.createEl("span", {
+		headerRight.createSpan({
 			cls: "okr-progress-num",
 			text: `${obj.progress}%`,
 		});
-		const moreBtn = headerRight.createEl("button", {
-			cls: "okr-btn-icon okr-more-btn",
-			text: "⋯",
-		});
-		moreBtn.setAttribute("aria-label", this.t("actions.moreActions"));
-		moreBtn.addEventListener("click", (event) => {
-			event.stopPropagation();
-			this.openObjectiveMenu(event, obj);
-		});
+		if (this.isCurrentPeriodWritable()) {
+			const moreBtn = headerRight.createEl("button", {
+				cls: "okr-btn-icon okr-more-btn",
+				text: "⋯",
+			});
+			moreBtn.setAttribute("aria-label", this.t("actions.moreActions"));
+			moreBtn.addEventListener("click", (event) => {
+				event.stopPropagation();
+				this.openObjectiveMenu(event, obj);
+			});
+		}
 
 		this.renderProgressBar(
 			card,
@@ -320,17 +370,19 @@ export class DashboardView extends ItemView {
 			this.renderKRRow(krList, obj, keyResult, index);
 		});
 
-		const addKrRow = krList.createDiv("okr-add-kr-row");
-		const addKrBtn = addKrRow.createEl("button", {
-			cls: "okr-add-kr-btn",
-			text: `＋ ${this.t("actions.addKeyResult")}`,
-		});
-		addKrBtn.addEventListener("click", () => {
-			new NewKRModal(this.app, this.manager, {
-				initialPeriod: this.currentPeriod,
-				initialObjectiveId: obj.id,
-			}).open();
-		});
+		if (this.isCurrentPeriodWritable()) {
+			const addKrRow = krList.createDiv("okr-add-kr-row");
+			const addKrBtn = addKrRow.createEl("button", {
+				cls: "okr-add-kr-btn",
+				text: `＋ ${this.t("actions.addKeyResult")}`,
+			});
+			addKrBtn.addEventListener("click", () => {
+				new NewKRModal(this.app, this.manager, {
+					initialPeriod: this.currentPeriod,
+					initialObjectiveId: obj.id,
+				}).open();
+			});
+		}
 	}
 
 	private renderKRRow(
@@ -341,7 +393,7 @@ export class DashboardView extends ItemView {
 	): void {
 		const row = container.createDiv("okr-kr-row");
 		row.setAttribute("data-kr-id", kr.id);
-		row.draggable = true;
+		row.draggable = this.isCurrentPeriodWritable();
 		row.addEventListener("click", () => {
 			void this.openFile(
 				kr.filePath,
@@ -350,14 +402,16 @@ export class DashboardView extends ItemView {
 		});
 
 		const left = row.createDiv("okr-kr-row-left");
-		const dragHandle = left.createDiv("okr-kr-drag-handle");
-		dragHandle.setAttribute("aria-hidden", "true");
-		setIcon(dragHandle, "grip-vertical");
-		left.createEl("span", {
+		if (this.isCurrentPeriodWritable()) {
+			const dragHandle = left.createDiv("okr-kr-drag-handle");
+			dragHandle.setAttribute("aria-hidden", "true");
+			setIcon(dragHandle, "grip-vertical");
+		}
+		left.createSpan({
 			cls: `okr-kr-dot okr-conf-${kr.confidence}`,
 			text: "●",
 		});
-		const title = left.createEl("span", {
+		const title = left.createSpan({
 			cls: "okr-kr-title",
 			text: kr.title,
 		});
@@ -371,26 +425,28 @@ export class DashboardView extends ItemView {
 
 		const right = row.createDiv("okr-kr-row-right");
 		this.renderProgressRing(right, kr.progress);
-		right.createEl("span", { cls: "okr-kr-pct", text: `${kr.progress}%` });
+		right.createSpan({ cls: "okr-kr-pct", text: `${kr.progress}%` });
 
-		const checkInButton = right.createEl("button", {
-			cls: "okr-checkin-btn",
-			text: "↑",
-		});
-		checkInButton.setAttribute(
-			"aria-label",
-			this.t("actions.recordCheckIn"),
-		);
-		checkInButton.setAttribute("title", this.t("actions.recordCheckIn"));
-		checkInButton.addEventListener("click", (event) => {
-			event.stopPropagation();
-			new CheckInModal(this.app, this.manager, {
-				prefillKrId: kr.id,
-				prefillPeriod: kr.period,
-			}).open();
-		});
+		if (this.isCurrentPeriodWritable()) {
+			const checkInButton = right.createEl("button", {
+				cls: "okr-checkin-btn",
+				text: "↑",
+			});
+			checkInButton.setAttribute(
+				"aria-label",
+				this.t("actions.recordCheckIn"),
+			);
+			checkInButton.setAttribute("title", this.t("actions.recordCheckIn"));
+			checkInButton.addEventListener("click", (event) => {
+				event.stopPropagation();
+				new CheckInModal(this.app, this.manager, {
+					prefillKrId: kr.id,
+					prefillPeriod: kr.period,
+				}).open();
+			});
 
-		this.bindKRDragEvents(row, container, objective, kr, index);
+			this.bindKRDragEvents(row, container, objective, kr, index);
+		}
 	}
 
 	private bindKRDragEvents(
@@ -621,11 +677,14 @@ export class DashboardView extends ItemView {
 
 	private renderEmptyState(container: HTMLElement): void {
 		const empty = container.createDiv("okr-empty-state");
-		empty.createEl("div", { cls: "okr-empty-icon", text: "◎" });
-		empty.createEl("div", {
+		empty.createDiv({ cls: "okr-empty-icon", text: "◎" });
+		empty.createDiv({
 			cls: "okr-empty-text",
 			text: this.t("dashboard.currentPeriodHasNoObjectives"),
 		});
+		if (!this.isCurrentPeriodWritable()) {
+			return;
+		}
 		const button = empty.createEl("button", {
 			cls: "okr-empty-btn",
 			text: `＋ ${this.t("actions.newObjective")}`,
@@ -634,6 +693,9 @@ export class DashboardView extends ItemView {
 	}
 
 	private renderFooter(container: HTMLElement): void {
+		if (!this.isCurrentPeriodWritable()) {
+			return;
+		}
 		const footer = container.createDiv("okr-footer");
 		const button = footer.createEl("button", {
 			cls: "okr-btn-primary okr-add-obj-btn",
@@ -644,8 +706,8 @@ export class DashboardView extends ItemView {
 
 	private renderErrorState(container: HTMLElement): void {
 		const empty = container.createDiv("okr-empty-state");
-		empty.createEl("div", { cls: "okr-empty-icon", text: "!" });
-		empty.createEl("div", {
+		empty.createDiv({ cls: "okr-empty-icon", text: "!" });
+		empty.createDiv({
 			cls: "okr-empty-text",
 			text: this.t("dashboard.errorState"),
 		});
@@ -682,7 +744,7 @@ export class DashboardView extends ItemView {
 			overdueObjectives.length > 3
 				? this.t("dashboard.overdueReminderSuffix")
 				: "";
-		reminder.createEl("span", {
+		reminder.createSpan({
 			text: this.t("dashboard.overdueReminder", {
 				count: overdueObjectives.length,
 				titles: localizedTitles,
@@ -697,17 +759,17 @@ export class DashboardView extends ItemView {
 		deadlineState: ReturnType<typeof getObjectiveDeadlineState>,
 	): void {
 		const meta = container.createDiv("okr-obj-meta");
-		meta.createEl("span", {
+		meta.createSpan({
 			cls: "okr-obj-deadline-text",
 			text: deadlineState.helpText ?? deadlineState.label,
 		});
 		if (deadlineState.tone !== "normal") {
-			meta.createEl("span", {
+			meta.createSpan({
 				cls: `okr-badge okr-deadline-badge okr-deadline-${deadlineState.tone}`,
 				text: deadlineState.label,
 			});
 		}
-		if (deadlineState.showPostponeAction) {
+		if (deadlineState.showPostponeAction && this.isCurrentPeriodWritable()) {
 			const postponeButton = meta.createEl("button", {
 				cls: "okr-row-action-btn okr-row-action-quiet",
 				text: this.t("actions.postpone"),
@@ -797,6 +859,100 @@ export class DashboardView extends ItemView {
 
 	private openPostponeObjectiveModal(objective: Objective): void {
 		new PostponeObjectiveModal(this.app, this.manager, objective).open();
+	}
+
+	private openPeriodMenu(event: MouseEvent): void {
+		const menu = new Menu();
+		const info = this.currentPeriodInfo;
+		if (info?.status === "open") {
+			menu.addItem((item) =>
+				item.setTitle(this.t("actions.closePeriod")).onClick(() => {
+					new ClosePeriodModal(
+						this.app,
+						this.manager,
+						info.period,
+						() => this.scheduleRender(),
+					).open();
+				}),
+			);
+		}
+		if (info?.status === "closed") {
+			menu.addItem((item) =>
+				item.setTitle(this.t("actions.reopenPeriod")).onClick(() => {
+					void this.runPeriodAction(
+						() => this.manager.reopenPeriod(info.period),
+						this.t("notices.periodReopened", { period: info.period }),
+					);
+				}),
+			);
+			menu.addItem((item) =>
+				item.setTitle(this.t("actions.archivePeriod")).onClick(() => {
+					new ConfirmModal(this.app, {
+						title: this.t("actions.archivePeriod"),
+						message: this.t("modals.archivePeriod.confirm", {
+							period: info.period,
+						}),
+						confirmText: this.t("actions.archivePeriod"),
+						onConfirm: () =>
+							this.runPeriodAction(
+								() => this.manager.archivePeriod(info.period),
+								this.t("notices.periodArchived", { period: info.period }),
+							),
+					}).open();
+				}),
+			);
+		}
+		if (info?.status === "archived") {
+			menu.addItem((item) =>
+				item.setTitle(this.t("actions.unarchivePeriod")).onClick(() => {
+					void this.runPeriodAction(
+						() => this.manager.unarchivePeriod(info.period),
+						this.t("notices.periodUnarchived", { period: info.period }),
+					);
+				}),
+			);
+		}
+		if (info && info.status !== "archived" && this.objectives.length > 0) {
+			menu.addItem((item) =>
+				item.setTitle(this.t("actions.saveTemplate")).onClick(() => {
+					new SavePeriodTemplateModal(
+						this.app,
+						this.manager,
+						info.period,
+					).open();
+				}),
+			);
+		}
+		menu.addItem((item) =>
+			item.setTitle(this.t("actions.manageTemplates")).onClick(() => {
+				new PeriodTemplatesModal(this.app, this.manager, (targetPeriod) => {
+					if (targetPeriod) {
+						this.currentPeriod = targetPeriod;
+					}
+					this.scheduleRender();
+				}).open();
+			}),
+		);
+		menu.showAtMouseEvent(event);
+	}
+
+	private async runPeriodAction(
+		action: () => Promise<void>,
+		successMessage: string,
+	): Promise<void> {
+		try {
+			await action();
+			new Notice(successMessage);
+			this.scheduleRender();
+		} catch (error) {
+			new Notice(
+				error instanceof Error ? error.message : this.t("errors.unknown"),
+			);
+		}
+	}
+
+	private isCurrentPeriodWritable(): boolean {
+		return this.currentPeriodInfo?.status === "open";
 	}
 
 	private getObjectiveStateKey(objective: Objective): string {

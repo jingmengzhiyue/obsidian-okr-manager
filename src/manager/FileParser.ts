@@ -20,6 +20,7 @@ import {
 	FRONTMATTER_OKR_PERIOD_TYPE,
 	FRONTMATTER_OWNER,
 	FRONTMATTER_PROGRESS,
+	FRONTMATTER_ROLLOVER_FROM,
 	FRONTMATTER_STATUS,
 	FRONTMATTER_TARGET,
 	FRONTMATTER_TITLE,
@@ -115,6 +116,10 @@ export class FileParser {
 			throw new Error(`Invalid OKR period in ${file.path}: ${period || "(empty)"}`);
 		}
 		const checkInsByKrId = this.parseMarkdownCheckIns(content);
+		const rolloverFrom = this.parseObjectiveOrigin(
+			fm[FRONTMATTER_ROLLOVER_FROM],
+			file.path,
+		);
 
 		return {
 			id,
@@ -137,6 +142,7 @@ export class FileParser {
 				filePath: file.path,
 				checkInsByKrId,
 			}),
+			...(rolloverFrom ? { rolloverFrom } : {}),
 		};
 	}
 
@@ -327,7 +333,39 @@ export class FileParser {
 			[FRONTMATTER_KEY_RESULTS]: objective.keyResults.map((keyResult) =>
 				this.serializeKeyResult(keyResult),
 			),
+			...(objective.rolloverFrom
+				? {
+						[FRONTMATTER_ROLLOVER_FROM]: {
+							period: objective.rolloverFrom.period,
+							"objective-id": objective.rolloverFrom.objectiveId,
+						},
+					}
+				: {}),
 		};
+	}
+
+	private parseObjectiveOrigin(
+		value: unknown,
+		filePath: string,
+	): Objective["rolloverFrom"] {
+		if (value == null) {
+			return undefined;
+		}
+		if (!value || typeof value !== "object" || Array.isArray(value)) {
+			throw new Error(`Invalid rollover-from in ${filePath}`);
+		}
+		const record = value as Record<string, unknown>;
+		const period = this.parseString(record.period);
+		const objectiveId = this.parseString(record["objective-id"]);
+		if (
+			!period ||
+			!objectiveId ||
+			!this.isValidPeriod(period, this.inferPeriodType(period)) ||
+			!OBJECTIVE_ID_PATTERN.test(objectiveId)
+		) {
+			throw new Error(`Invalid rollover-from in ${filePath}`);
+		}
+		return { period, objectiveId };
 	}
 
 	clampProgress(progress: number): number {
@@ -618,9 +656,11 @@ export class FileParser {
 			`${this.escapeRegExp(OKR_CHECKINS_START)}([\\s\\S]*?)${this.escapeRegExp(OKR_CHECKINS_END)}`,
 			"gm",
 		);
-		for (const match of content.matchAll(blockPattern)) {
-			if (match[1]) {
-				this.parseMarkdownCheckInBlock(match[1], result);
+		let match: RegExpExecArray | null;
+		while ((match = blockPattern.exec(content)) !== null) {
+			const block = match[1];
+			if (block) {
+				this.parseMarkdownCheckInBlock(block, result);
 			}
 		}
 

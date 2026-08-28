@@ -1055,3 +1055,62 @@
 .okr-obj-card {
   animation: okr-fade-in 0.2s ease;
 }
+
+/* ---------- 周期生命周期与模板 ---------- */
+.okr-show-archived {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  white-space: nowrap;
+}
+
+.okr-period-status-open { color: var(--color-green); }
+.okr-period-status-closed { color: var(--color-orange); }
+.okr-period-status-archived { color: var(--text-faint); }
+
+.okr-period-selection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: min(45vh, 420px);
+  overflow-y: auto;
+  margin: 14px 0;
+}
+
+.okr-period-selection-group,
+.okr-period-template-row {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+}
+
+.okr-period-selection-child { margin-left: 24px; }
+
+.okr-period-template-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.okr-period-template-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-muted);
+}
+
+@media (max-width: 480px) {
+  .okr-toolbar-right,
+  .okr-period-template-controls,
+  .okr-period-template-summary {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .okr-period-selection-child { margin-left: 12px; }
+}

@@ -76,11 +76,11 @@ export class NewObjectiveModal extends Modal {
 			attr: { placeholder: this.t("modals.fields.period") },
 		});
 		periodInput.value = this.period;
-		const periodHint = periodField.createEl("div", {
+		const periodHint = periodField.createDiv({
 			cls: "okr-input-hint",
 			text: this.getPeriodHint(this.periodType),
 		});
-		const periodError = periodField.createEl("div", {
+		const periodError = periodField.createDiv({
 			cls: "okr-input-error",
 			text: this.t("modals.newObjective.periodFormatError"),
 		});
@@ -257,7 +257,7 @@ export class NewObjectiveModal extends Modal {
 	private createRequiredLabel(container: HTMLElement, text: string): void {
 		const label = container.createEl("label", { cls: "okr-label" });
 		label.appendText(text);
-		label.createEl("span", { cls: "okr-required", text: "*" });
+		label.createSpan({ cls: "okr-required", text: "*" });
 	}
 
 	private getDefaultDue(): string {

@@ -47,7 +47,7 @@ export class EditObjectiveModal extends Modal {
 				id: this.objective.id,
 			}),
 		});
-		contentEl.createEl("div", {
+		contentEl.createDiv({
 			cls: "okr-modal-subtitle",
 			text: this.t("modals.editObjective.period", {
 				period: this.manager
@@ -211,7 +211,7 @@ export class EditObjectiveModal extends Modal {
 	private createRequiredLabel(container: HTMLElement, text: string): void {
 		const label = container.createEl("label", { cls: "okr-label" });
 		label.appendText(text);
-		label.createEl("span", { cls: "okr-required", text: "*" });
+		label.createSpan({ cls: "okr-required", text: "*" });
 	}
 
 	private renderKeyResultsSection(container: HTMLElement): void {
@@ -230,7 +230,7 @@ export class EditObjectiveModal extends Modal {
 		}
 		this.keyResultsContainer.empty();
 		if (this.keyResults.length === 0) {
-			this.keyResultsContainer.createEl("div", {
+			this.keyResultsContainer.createDiv({
 				cls: "okr-edit-obj-kr-empty",
 				text: this.t("detail.emptyKeyResults"),
 			});
@@ -246,7 +246,7 @@ export class EditObjectiveModal extends Modal {
 			return;
 		}
 		const item = this.keyResultsContainer.createDiv("okr-edit-obj-kr-item");
-		item.createEl("span", {
+		item.createSpan({
 			cls: "okr-edit-obj-kr-title",
 			text: keyResult.title,
 		});

@@ -50,8 +50,15 @@ export class NewKRModal extends Modal {
 				.getCurrentPeriod(this.manager.getSettings().defaultPeriodType);
 		this.due = today;
 
+		let allPeriods: string[] = [];
 		try {
-			await this.loadObjectives();
+			allPeriods = await this.manager.getWritablePeriods();
+			if (!allPeriods.includes(this.period)) {
+				this.period = allPeriods[allPeriods.length - 1] ?? "";
+			}
+			if (this.period) {
+				await this.loadObjectives();
+			}
 		} catch (error) {
 			this.objectives = [];
 			this.showLoadError(error);
@@ -77,12 +84,12 @@ export class NewKRModal extends Modal {
 		const periodSelect = periodField.createEl("select", {
 			cls: "okr-select",
 		});
-		const allPeriods = await this.manager.getAllPeriods();
-		if (!allPeriods.includes(this.period)) {
+		if (allPeriods.length === 0) {
 			periodSelect.createEl("option", {
-				text: this.period,
-				value: this.period,
+				text: this.t("dashboard.noPeriods"),
+				value: "",
 			});
+			periodSelect.disabled = true;
 		}
 		for (const p of allPeriods) {
 			periodSelect.createEl("option", {
@@ -170,7 +177,7 @@ export class NewKRModal extends Modal {
 		});
 		currentInput.setAttribute("min", "0");
 		currentInput.setAttribute("step", "any");
-		const currentError = currentField.createEl("div", {
+		const currentError = currentField.createDiv({
 			cls: "okr-input-error",
 			text: this.t("modals.input.currentError"),
 		});
@@ -204,7 +211,7 @@ export class NewKRModal extends Modal {
 		});
 		targetInput.setAttribute("min", "0");
 		targetInput.setAttribute("step", "any");
-		const targetError = targetField.createEl("div", {
+		const targetError = targetField.createDiv({
 			cls: "okr-input-error",
 			text: this.t("modals.input.targetError"),
 		});
@@ -427,7 +434,7 @@ export class NewKRModal extends Modal {
 	private createRequiredLabel(container: HTMLElement, text: string): void {
 		const label = container.createEl("label", { cls: "okr-label" });
 		label.appendText(text);
-		label.createEl("span", { cls: "okr-required", text: "*" });
+		label.createSpan({ cls: "okr-required", text: "*" });
 	}
 
 	private showLoadError(error: unknown): void {

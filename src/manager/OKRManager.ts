@@ -1,6 +1,5 @@
 import {
 	App,
-	normalizePath,
 	stringifyYaml,
 	TAbstractFile,
 	TFile,
@@ -9,12 +8,21 @@ import {
 import { createI18n, type I18n, type TranslationValue } from "../i18n";
 import { FileParser } from "./FileParser";
 import {
+	ApplyPeriodTemplateInput,
 	CheckIn,
+	ClosePeriodInput,
+	ClosePeriodResult,
 	KeyResult,
 	Objective,
+	OKRPeriodInfo,
 	OKRPeriodType,
 	OKRPluginSettings,
 	OKRStatus,
+	PeriodTemplate,
+	PeriodTemplateSummary,
+	RolloverCandidate,
+	RolloverMapping,
+	SavePeriodTemplateInput,
 } from "../types";
 import {
 	FRONTMATTER_OKR_TYPE,
@@ -22,6 +30,7 @@ import {
 	OKR_KR_LIST_END,
 	OKR_KR_LIST_START,
 	OKR_TYPE_OBJECTIVE,
+	PERIOD_METADATA_FILE,
 	PERIOD_PATTERN,
 } from "../constants";
 import {
@@ -35,6 +44,10 @@ import {
 	isValidCheckInFields,
 	isValidKeyResultValues,
 } from "../utils/validation";
+import { formatLocalDate } from "../utils/date";
+import { getIncompleteObjectives, getNextPeriod } from "../utils/period";
+import { normalizeVaultPath } from "../utils/path";
+import { PeriodRepository } from "./PeriodRepository";
 
 interface PeriodCacheEntry {
 	objectives: Objective[];
@@ -51,9 +64,11 @@ interface ObjectiveLookupResult {
 
 export class OKRManager {
 	private parser: FileParser;
+	private periodRepository: PeriodRepository;
 	private readonly cache = new Map<string, PeriodCacheEntry>();
 	private readonly summaryCache = new Map<string, PeriodCacheEntry>();
 	private readonly mutationQueues = new Map<string, Promise<void>>();
+	private readonly periodMutationQueues = new Map<string, Promise<void>>();
 	private readonly CACHE_TTL = 30_000;
 	private cacheVersion = 0;
 
@@ -63,6 +78,7 @@ export class OKRManager {
 		private i18n: I18n = createI18n(),
 	) {
 		this.parser = new FileParser(app);
+		this.periodRepository = new PeriodRepository(app, settings, this.parser);
 	}
 
 	getApp(): App {
@@ -87,38 +103,65 @@ export class OKRManager {
 
 	updateSettings(settings: OKRPluginSettings): void {
 		this.settings = settings;
+		this.periodRepository.updateSettings(settings);
 		this.clearAllCache();
 	}
 
 	invalidateCacheForFile(file: TAbstractFile): boolean {
 		const path = file.path;
+		const periodInvalidated = this.periodRepository.invalidatePath(path);
 		const period = this.extractPeriodFromPath(path);
 		if (period) {
 			this.invalidatePeriodCaches(period);
 			return true;
 		}
-		return false;
+		return periodInvalidated;
 	}
 
 	invalidateCacheByPath(oldPath: string): boolean {
-		const normalized = normalizePath(oldPath);
+		const normalized = normalizeVaultPath(oldPath);
+		const periodInvalidated = this.periodRepository.invalidatePath(normalized);
 		const period = this.extractPeriodFromPath(normalized);
 		if (period) {
 			this.invalidatePeriodCaches(period);
 			return true;
 		}
-		return false;
+		return periodInvalidated;
 	}
 
 	clearAllCache(): void {
 		this.cacheVersion += 1;
 		this.cache.clear();
 		this.summaryCache.clear();
+		this.periodRepository.clearCache();
+	}
+
+	async getPeriodInfos(
+		options: { includeArchived?: boolean } = {},
+	): Promise<OKRPeriodInfo[]> {
+		const infos = await Promise.all(
+			(await this.getAllPeriods()).map((period) =>
+				this.periodRepository.getPeriodInfo(period),
+			),
+		);
+		return options.includeArchived
+			? infos
+			: infos.filter((info) => info.status !== "archived");
+	}
+
+	async getPeriodInfo(period: string): Promise<OKRPeriodInfo> {
+		return this.periodRepository.getPeriodInfo(this.normalizePeriod(period));
+	}
+
+	async getWritablePeriods(): Promise<string[]> {
+		return (await this.getPeriodInfos({ includeArchived: true }))
+			.filter((info) => info.status === "open")
+			.map((info) => info.period);
 	}
 
 	async getAllPeriods(): Promise<string[]> {
 		const root = this.app.vault.getAbstractFileByPath(
-			normalizePath(this.settings.rootDir),
+			normalizeVaultPath(this.settings.rootDir),
 		);
 		if (!(root instanceof TFolder)) {
 			return [];
@@ -284,46 +327,49 @@ export class OKRManager {
 		if (!this.parser.isValidPeriod(period, params.periodType)) {
 			throw new Error(this.t("errors.invalidPeriod", { period }));
 		}
-		const existing = await this.getObjectiveSummaries(period);
-		const nextId =
-			existing.reduce((max, objective) => {
-				const parsed = Number.parseInt(
-					objective.id.replace("O", ""),
-					10,
-				);
-				return Math.max(max, Number.isNaN(parsed) ? 0 : parsed);
-			}, 0) + 1;
-		const id = `O${nextId}`;
-		const fileName = this.parser.generateObjectiveFileName(id);
-		const periodDir = this.getPeriodDir(period);
-		await this.ensureFolder(periodDir);
-		const filePath = normalizePath(`${periodDir}/${fileName}`);
-		this.assertFileDoesNotExist(
-			filePath,
-			this.t("errors.objectiveExists", { fileName }),
-		);
+		return this.withPeriodLocks([period], async () => {
+			await this.assertPeriodWritable(period);
+			const existing = await this.getObjectiveSummaries(period);
+			const nextId =
+				existing.reduce((max, objective) => {
+					const parsed = Number.parseInt(
+						objective.id.replace("O", ""),
+						10,
+					);
+					return Math.max(max, Number.isNaN(parsed) ? 0 : parsed);
+				}, 0) + 1;
+			const id = `O${nextId}`;
+			const fileName = this.parser.generateObjectiveFileName(id);
+			const periodDir = this.getPeriodDir(period);
+			await this.ensureFolder(periodDir);
+			const filePath = normalizeVaultPath(`${periodDir}/${fileName}`);
+			this.assertFileDoesNotExist(
+				filePath,
+				this.t("errors.objectiveExists", { fileName }),
+			);
 
-		const objective: Objective = {
-			id,
-			period,
-			periodType: params.periodType,
-			title: params.title.trim(),
-			description: params.description.trim(),
-			owner: params.owner.trim(),
-			status: params.status,
-			progress: 0,
-			created: params.created,
-			due: params.due,
-			filePath,
-			keyResults: [],
-		};
+			const objective: Objective = {
+				id,
+				period,
+				periodType: params.periodType,
+				title: params.title.trim(),
+				description: params.description.trim(),
+				owner: params.owner.trim(),
+				status: params.status,
+				progress: 0,
+				created: params.created,
+				due: params.due,
+				filePath,
+				keyResults: [],
+			};
 
-		await this.app.vault.create(
-			filePath,
-			this.buildObjectiveContent(objective),
-		);
-		this.upsertObjectiveInCaches(objective);
-		return objective;
+			await this.app.vault.create(
+				filePath,
+				this.buildObjectiveContent(objective),
+			);
+			this.upsertObjectiveInCaches(objective);
+			return objective;
+		});
 	}
 
 	async createKeyResult(
@@ -689,7 +735,7 @@ export class OKRManager {
 
 	async updateStatus(filePath: string, status: OKRStatus): Promise<void> {
 		const file = this.app.vault.getAbstractFileByPath(
-			normalizePath(filePath),
+			normalizeVaultPath(filePath),
 		);
 		if (!(file instanceof TFile)) {
 			return;
@@ -703,15 +749,19 @@ export class OKRManager {
 		period: string,
 		_deleteKRs: boolean,
 	): Promise<void> {
-		const entry = await this.findObjectiveEntry(objectiveId, period);
-		if (!entry) {
-			throw new Error(
-				this.t("errors.objectiveToDeleteNotFound", { id: objectiveId }),
-			);
-		}
+		const normalizedPeriod = this.normalizePeriod(period);
+		await this.withPeriodLocks([normalizedPeriod], async () => {
+			await this.assertPeriodWritable(normalizedPeriod);
+			const entry = await this.findObjectiveEntry(objectiveId, period);
+			if (!entry) {
+				throw new Error(
+					this.t("errors.objectiveToDeleteNotFound", { id: objectiveId }),
+				);
+			}
 
-		await this.app.fileManager.trashFile(entry.file);
-		this.invalidatePeriodCaches(this.normalizePeriod(period));
+			await this.app.fileManager.trashFile(entry.file);
+			this.invalidatePeriodCaches(normalizedPeriod);
+		});
 	}
 
 	async deleteKeyResult(krId: string, period: string): Promise<void> {
@@ -741,11 +791,17 @@ export class OKRManager {
 	async migrateLegacyProgressRecords(): Promise<{
 		scanned: number;
 		migrated: number;
+		skippedPeriods?: number;
 	}> {
 		let scanned = 0;
 		let migrated = 0;
+		let skippedPeriods = 0;
 		const periods = await this.getAllPeriods();
 		for (const period of periods) {
+			if ((await this.getPeriodInfo(period)).status !== "open") {
+				skippedPeriods += 1;
+				continue;
+			}
 			for (const file of this.getObjectiveFiles(period)) {
 				const frontmatter = await this.parser.readFrontmatter(file);
 				if (frontmatter[FRONTMATTER_OKR_TYPE] !== OKR_TYPE_OBJECTIVE) {
@@ -763,7 +819,372 @@ export class OKRManager {
 			this.invalidatePeriodCaches(period);
 		}
 
-		return { scanned, migrated };
+		return {
+			scanned,
+			migrated,
+			...(skippedPeriods > 0 ? { skippedPeriods } : {}),
+		};
+	}
+
+	async getRolloverCandidates(period: string): Promise<RolloverCandidate[]> {
+		const normalizedPeriod = this.normalizePeriod(period);
+		const info = await this.getPeriodInfo(normalizedPeriod);
+		const alreadyRolled = new Set(
+			info.rollovers.map((mapping) => mapping.sourceObjectiveId),
+		);
+		return getIncompleteObjectives(
+			await this.getObjectiveSummaries(normalizedPeriod),
+			alreadyRolled,
+		);
+	}
+
+	async closePeriod(input: ClosePeriodInput): Promise<ClosePeriodResult> {
+		const sourcePeriod = this.normalizePeriod(input.period);
+		const sourceInfo = await this.getPeriodInfo(sourcePeriod);
+		const defaultTarget = getNextPeriod(sourcePeriod, sourceInfo.periodType);
+		const targetPeriod = this.normalizePeriod(input.targetPeriod ?? defaultTarget ?? "");
+		const periodsToLock = input.selections.length > 0
+			? [sourcePeriod, targetPeriod]
+			: [sourcePeriod];
+
+		return this.withPeriodLocks(periodsToLock, async () => {
+			const latestSourceInfo = await this.getPeriodInfo(sourcePeriod);
+			if (latestSourceInfo.status !== "open") {
+				throw new Error(this.t("errors.periodNotOpen", { period: sourcePeriod }));
+			}
+			const candidates = await this.getRolloverCandidates(sourcePeriod);
+			if (
+				candidates.length > 0 &&
+				input.selections.length === 0 &&
+				input.allowUnfinishedWithoutRollover !== true
+			) {
+				throw new Error(this.t("errors.unfinishedRolloverConfirmationRequired"));
+			}
+
+			const candidateById = new Map(
+				candidates.map((candidate) => [candidate.objective.id, candidate]),
+			);
+			const selectedObjectiveIds = new Set<string>();
+			const selectedCandidates = input.selections.map((selection) => {
+				if (selectedObjectiveIds.has(selection.objectiveId)) {
+					throw new Error(
+						this.t("errors.invalidRolloverSelection", {
+							id: selection.objectiveId,
+						}),
+					);
+				}
+				selectedObjectiveIds.add(selection.objectiveId);
+				const candidate = candidateById.get(selection.objectiveId);
+				if (!candidate) {
+					throw new Error(
+						this.t("errors.invalidRolloverSelection", {
+							id: selection.objectiveId,
+						}),
+					);
+				}
+				const selectedIds = new Set(selection.keyResultIds);
+				if (
+					selection.keyResultIds.some(
+						(id) => !candidate.keyResults.some((keyResult) => keyResult.id === id),
+					)
+				) {
+					throw new Error(
+						this.t("errors.invalidRolloverSelection", {
+							id: selection.objectiveId,
+						}),
+					);
+				}
+				return {
+					objective: candidate.objective,
+					keyResults: candidate.keyResults.filter((keyResult) =>
+						selectedIds.has(keyResult.id),
+					),
+				};
+			});
+
+			const createdFiles: TFile[] = [];
+			const createdObjectives: Objective[] = [];
+			const mappings: RolloverMapping[] = [];
+			let metadataWriteStarted = false;
+			try {
+				if (selectedCandidates.length > 0) {
+					if (!targetPeriod || targetPeriod === sourcePeriod) {
+						throw new Error(this.t("errors.invalidRolloverTarget", { period: targetPeriod }));
+					}
+					const targetType = this.parser.inferPeriodType(targetPeriod);
+					if (
+						targetType !== latestSourceInfo.periodType ||
+						!this.parser.isValidPeriod(targetPeriod, targetType)
+					) {
+						throw new Error(this.t("errors.invalidRolloverTarget", { period: targetPeriod }));
+					}
+					await this.assertPeriodWritable(targetPeriod);
+					const existing = await this.getObjectiveSummaries(targetPeriod);
+					let nextId = this.getNextObjectiveNumber(existing);
+					const today = formatLocalDate(new Date());
+					const due = this.parser.getDueForPeriod(targetPeriod, targetType) ?? today;
+					for (const candidate of selectedCandidates) {
+						const objectiveId = `O${nextId}`;
+						nextId += 1;
+						const filePath = normalizeVaultPath(
+							`${this.getPeriodDir(targetPeriod)}/${this.parser.generateObjectiveFileName(objectiveId)}`,
+						);
+						const keyResults = candidate.keyResults.map((keyResult, index) => ({
+							...keyResult,
+							id: `${objectiveId}-KR${index + 1}`,
+							objectiveId,
+							period: targetPeriod,
+							periodType: targetType,
+							order: index,
+							status: "active" as const,
+							created: today,
+							due,
+							filePath,
+							checkIns: [],
+						}));
+						const objective: Objective = {
+							...candidate.objective,
+							id: objectiveId,
+							period: targetPeriod,
+							periodType: targetType,
+							status: "active",
+							progress: this.parser.calculateObjectiveProgress(keyResults),
+							created: today,
+							due,
+							filePath,
+							keyResults,
+							rolloverFrom: {
+								period: sourcePeriod,
+								objectiveId: candidate.objective.id,
+							},
+						};
+						const file = await this.createObjectiveFile(objective);
+						createdFiles.push(file);
+						createdObjectives.push(objective);
+						mappings.push({
+							sourceObjectiveId: candidate.objective.id,
+							sourceKeyResultIds: candidate.keyResults.map((item) => item.id),
+							targetPeriod,
+							targetObjectiveId: objectiveId,
+						});
+					}
+				}
+
+				const now = new Date().toISOString();
+				metadataWriteStarted = true;
+				await this.periodRepository.writePeriodInfo({
+					...latestSourceInfo,
+					status: "closed",
+					createdAt: latestSourceInfo.createdAt || now,
+					closedAt: now,
+					archivedAt: undefined,
+					rollovers: [...latestSourceInfo.rollovers, ...mappings],
+				});
+				this.invalidatePeriodCaches(sourcePeriod);
+				this.invalidatePeriodCaches(targetPeriod);
+				return {
+					period: sourcePeriod,
+					targetPeriod: selectedCandidates.length > 0 ? targetPeriod : undefined,
+					createdObjectives,
+					rollovers: mappings,
+				};
+			} catch (error) {
+				const residualPaths = await this.rollbackFiles(createdFiles);
+				if (metadataWriteStarted) {
+					try {
+						await this.periodRepository.writePeriodInfo(latestSourceInfo);
+					} catch {
+						residualPaths.push(
+							this.periodRepository.getPeriodMetadataPath(sourcePeriod),
+						);
+					}
+				}
+				if (residualPaths.length > 0) {
+					const message = error instanceof Error ? error.message : this.t("errors.unknown");
+					throw new Error(
+						this.t("errors.rolloverRollbackIncomplete", {
+							message,
+							files: residualPaths.join(", "),
+						}),
+					);
+				}
+				throw error;
+			}
+		});
+	}
+
+	async reopenPeriod(period: string): Promise<void> {
+		await this.transitionPeriod(period, "closed", "open");
+	}
+
+	async archivePeriod(period: string): Promise<void> {
+		await this.transitionPeriod(period, "closed", "archived");
+	}
+
+	async unarchivePeriod(period: string): Promise<void> {
+		await this.transitionPeriod(period, "archived", "closed");
+	}
+
+	async listPeriodTemplates(): Promise<PeriodTemplateSummary[]> {
+		return (await this.periodRepository.listTemplates()).map((template) => ({
+			id: template.id,
+			name: template.name,
+			periodType: template.periodType,
+			createdAt: template.createdAt,
+			filePath: template.filePath,
+			objectiveCount: template.objectives.length,
+		}));
+	}
+
+	async savePeriodTemplate(input: SavePeriodTemplateInput): Promise<PeriodTemplate> {
+		const sourcePeriod = this.normalizePeriod(input.sourcePeriod);
+		const sourceInfo = await this.getPeriodInfo(sourcePeriod);
+		const objectiveById = new Map(
+			(await this.getObjectiveSummaries(sourcePeriod)).map((objective) => [
+				objective.id,
+				objective,
+			]),
+		);
+		const selectedObjectiveIds = new Set<string>();
+		const objectives = input.selections.map((selection) => {
+			if (selectedObjectiveIds.has(selection.objectiveId)) {
+				throw new Error(
+					this.t("errors.invalidRolloverSelection", {
+						id: selection.objectiveId,
+					}),
+				);
+			}
+			selectedObjectiveIds.add(selection.objectiveId);
+			const objective = objectiveById.get(selection.objectiveId);
+			if (!objective) {
+				throw new Error(this.t("errors.objectiveNotFound", { id: selection.objectiveId }));
+			}
+			const selectedIds = new Set(selection.keyResultIds);
+			if (
+				selection.keyResultIds.some(
+					(id) => !objective.keyResults.some((keyResult) => keyResult.id === id),
+				)
+			) {
+				throw new Error(
+					this.t("errors.invalidRolloverSelection", {
+						id: selection.objectiveId,
+					}),
+				);
+			}
+			return {
+				title: objective.title,
+				description: objective.description,
+				owner: objective.owner,
+				keyResults: objective.keyResults
+					.filter((keyResult) => selectedIds.has(keyResult.id))
+					.map((keyResult) => ({
+						title: keyResult.title,
+						description: keyResult.description,
+						owner: keyResult.owner,
+						unit: keyResult.unit,
+						target: keyResult.target,
+						confidence: keyResult.confidence,
+						order: keyResult.order,
+					})),
+			};
+		});
+		if (objectives.length === 0) {
+			throw new Error(this.t("errors.templateSelectionRequired"));
+		}
+		return this.periodRepository.createTemplate({
+			id: crypto.randomUUID(),
+			name: input.name.trim(),
+			periodType: sourceInfo.periodType,
+			createdAt: new Date().toISOString(),
+			objectives,
+		});
+	}
+
+	async applyPeriodTemplate(input: ApplyPeriodTemplateInput): Promise<Objective[]> {
+		const targetPeriod = this.normalizePeriod(input.targetPeriod);
+		return this.withPeriodLocks([targetPeriod], async () => {
+			await this.assertPeriodWritable(targetPeriod);
+			const template = await this.periodRepository.getTemplate(input.templateId);
+			if (!template) {
+				throw new Error(this.t("errors.templateNotFound", { id: input.templateId }));
+			}
+			const targetType = this.parser.inferPeriodType(targetPeriod);
+			if (
+				targetType !== template.periodType ||
+				!this.parser.isValidPeriod(targetPeriod, targetType)
+			) {
+				throw new Error(this.t("errors.templatePeriodTypeMismatch"));
+			}
+			if ((await this.getObjectiveSummaries(targetPeriod)).length > 0) {
+				throw new Error(this.t("errors.templateTargetNotEmpty"));
+			}
+
+			const today = formatLocalDate(new Date());
+			const due = this.parser.getDueForPeriod(targetPeriod, targetType) ?? today;
+			const createdFiles: TFile[] = [];
+			const createdObjectives: Objective[] = [];
+			try {
+				for (const [objectiveIndex, blueprint] of template.objectives.entries()) {
+					const id = `O${objectiveIndex + 1}`;
+					const filePath = normalizeVaultPath(
+						`${this.getPeriodDir(targetPeriod)}/${this.parser.generateObjectiveFileName(id)}`,
+					);
+					const objective: Objective = {
+						id,
+						period: targetPeriod,
+						periodType: targetType,
+						title: blueprint.title,
+						description: blueprint.description,
+						owner: blueprint.owner,
+						status: "active",
+						progress: 0,
+						created: today,
+						due,
+						filePath,
+						keyResults: [...blueprint.keyResults]
+							.sort((left, right) => left.order - right.order)
+							.map((keyResult, keyResultIndex) => ({
+							id: `${id}-KR${keyResultIndex + 1}`,
+							objectiveId: id,
+							period: targetPeriod,
+							periodType: targetType,
+							order: keyResultIndex,
+							title: keyResult.title,
+							description: keyResult.description,
+							owner: keyResult.owner,
+							unit: keyResult.unit,
+							current: 0,
+							target: keyResult.target,
+							progress: 0,
+							status: "active",
+							confidence: keyResult.confidence,
+							created: today,
+							due,
+							filePath,
+							checkIns: [],
+							})),
+					};
+					createdFiles.push(await this.createObjectiveFile(objective));
+					createdObjectives.push(objective);
+				}
+				this.invalidatePeriodCaches(targetPeriod);
+				return createdObjectives;
+			} catch (error) {
+				const residualPaths = await this.rollbackFiles(createdFiles);
+				if (residualPaths.length > 0) {
+					throw new Error(
+						this.t("errors.templateRollbackIncomplete", {
+							files: residualPaths.join(", "),
+						}),
+					);
+				}
+				throw error;
+			}
+		});
+	}
+
+	async deletePeriodTemplate(templateId: string): Promise<void> {
+		await this.periodRepository.deleteTemplate(templateId);
 	}
 
 	private async loadObjectivesForPeriod(
@@ -957,7 +1378,7 @@ export class OKRManager {
 	): Promise<TFile | null> {
 		const periodDir = this.getPeriodDir(this.normalizePeriod(period));
 		const candidate = this.app.vault.getAbstractFileByPath(
-			normalizePath(`${periodDir}/${objectiveId}.md`),
+			normalizeVaultPath(`${periodDir}/${objectiveId}.md`),
 		);
 		return candidate instanceof TFile ? candidate : null;
 	}
@@ -966,37 +1387,46 @@ export class OKRManager {
 		file: TFile,
 		mutation: (current: Objective) => Objective,
 	): Promise<Objective> {
-		const path = file.path;
-		const previous = this.mutationQueues.get(path) ?? Promise.resolve();
-		let release!: () => void;
-		const current = new Promise<void>((resolve) => {
-			release = resolve;
-		});
-		const queue = previous.catch(() => undefined).then(() => current);
-		this.mutationQueues.set(path, queue);
-		await previous.catch(() => undefined);
-
-		try {
-			let updated: Objective | null = null;
-			await this.app.vault.process(file, (content) => {
-				const latest = this.normalizeObjective(
-					this.parser.parseObjectiveContent(file, content),
-				);
-				updated = this.normalizeObjective(mutation(latest));
-				return this.buildUpdatedObjectiveContent(content, updated);
-			});
-			const result = updated as Objective | null;
-			if (!result) {
-				throw new Error(this.t("errors.objectiveNotFound", { id: file.path }));
-			}
-			this.upsertObjectiveInCaches(result);
-			return result;
-		} finally {
-			release();
-			if (this.mutationQueues.get(path) === queue) {
-				this.mutationQueues.delete(path);
-			}
+		const period = this.extractPeriodFromPath(file.path);
+		if (!period) {
+			throw new Error(this.t("errors.invalidPeriod", { period: file.path }));
 		}
+		return this.withPeriodLocks([period], async () => {
+			await this.assertPeriodWritable(period);
+			const path = file.path;
+			const previous = this.mutationQueues.get(path) ?? Promise.resolve();
+			let release!: () => void;
+			const current = new Promise<void>((resolve) => {
+				release = resolve;
+			});
+			const queue = previous.catch(() => undefined).then(() => current);
+			this.mutationQueues.set(path, queue);
+			await previous.catch(() => undefined);
+
+			try {
+				let updated: Objective | null = null;
+				await this.app.vault.process(file, (content) => {
+					const latest = this.normalizeObjective(
+						this.parser.parseObjectiveContent(file, content),
+					);
+					updated = this.normalizeObjective(mutation(latest));
+					return this.buildUpdatedObjectiveContent(content, updated);
+				});
+				const result = updated as Objective | null;
+				if (!result) {
+					throw new Error(
+						this.t("errors.objectiveNotFound", { id: file.path }),
+					);
+				}
+				this.upsertObjectiveInCaches(result);
+				return result;
+			} finally {
+				release();
+				if (this.mutationQueues.get(path) === queue) {
+					this.mutationQueues.delete(path);
+				}
+			}
+		});
 	}
 
 	private buildUpdatedObjectiveContent(
@@ -1020,7 +1450,124 @@ export class OKRManager {
 			return [];
 		}
 
-		return collectMarkdownFilesFromTree(periodFolder) as TFile[];
+		return (collectMarkdownFilesFromTree(periodFolder) as TFile[]).filter(
+			(file) => file.name !== PERIOD_METADATA_FILE,
+		);
+	}
+
+	private async transitionPeriod(
+		period: string,
+		expectedStatus: OKRPeriodInfo["status"],
+		nextStatus: OKRPeriodInfo["status"],
+	): Promise<void> {
+		const normalizedPeriod = this.normalizePeriod(period);
+		await this.withPeriodLocks([normalizedPeriod], async () => {
+			const info = await this.getPeriodInfo(normalizedPeriod);
+			if (info.status !== expectedStatus) {
+				throw new Error(
+					this.t("errors.invalidPeriodTransition", {
+						period: normalizedPeriod,
+						status: info.status,
+					}),
+				);
+			}
+			const now = new Date().toISOString();
+			await this.periodRepository.writePeriodInfo({
+				...info,
+				status: nextStatus,
+				createdAt: info.createdAt || now,
+				closedAt:
+					nextStatus === "open" ? undefined : info.closedAt || now,
+				archivedAt: nextStatus === "archived" ? now : undefined,
+			});
+			this.invalidatePeriodCaches(normalizedPeriod);
+		});
+	}
+
+	private async assertPeriodWritable(period: string): Promise<void> {
+		const info = await this.getPeriodInfo(period);
+		if (info.status !== "open") {
+			throw new Error(
+				this.t("errors.periodNotWritable", {
+					period,
+					status: this.t(`periodStatus.${info.status}`),
+				}),
+			);
+		}
+	}
+
+	private async withPeriodLocks<T>(
+		periods: string[],
+		task: () => Promise<T>,
+	): Promise<T> {
+		const ordered = [...new Set(periods.filter(Boolean))].sort();
+		const acquire = async (index: number): Promise<T> => {
+			const period = ordered[index];
+			if (!period) {
+				return task();
+			}
+			return this.withSinglePeriodLock(period, () => acquire(index + 1));
+		};
+		return acquire(0);
+	}
+
+	private async withSinglePeriodLock<T>(
+		period: string,
+		task: () => Promise<T>,
+	): Promise<T> {
+		const previous = this.periodMutationQueues.get(period) ?? Promise.resolve();
+		let release!: () => void;
+		const current = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const queue = previous.catch(() => undefined).then(() => current);
+		this.periodMutationQueues.set(period, queue);
+		await previous.catch(() => undefined);
+		try {
+			return await task();
+		} finally {
+			release();
+			if (this.periodMutationQueues.get(period) === queue) {
+				this.periodMutationQueues.delete(period);
+			}
+		}
+	}
+
+	private getNextObjectiveNumber(objectives: Objective[]): number {
+		return (
+			objectives.reduce((maximum, objective) => {
+				const value = Number.parseInt(objective.id.slice(1), 10);
+				return Math.max(maximum, Number.isNaN(value) ? 0 : value);
+			}, 0) + 1
+		);
+	}
+
+	private async createObjectiveFile(objective: Objective): Promise<TFile> {
+		await this.ensureFolder(this.getPeriodDir(objective.period));
+		this.assertFileDoesNotExist(
+			objective.filePath,
+			this.t("errors.objectiveExists", {
+				fileName: this.parser.generateObjectiveFileName(objective.id),
+			}),
+		);
+		const file = await this.app.vault.create(
+			objective.filePath,
+			this.buildObjectiveContent(objective),
+		);
+		this.upsertObjectiveInCaches(objective);
+		return file;
+	}
+
+	private async rollbackFiles(files: TFile[]): Promise<string[]> {
+		const residualPaths: string[] = [];
+		for (const file of [...files].reverse()) {
+			try {
+				await this.app.fileManager.trashFile(file);
+			} catch {
+				residualPaths.push(file.path);
+			}
+		}
+		return residualPaths;
 	}
 
 	private getValidCache(
@@ -1145,7 +1692,7 @@ export class OKRManager {
 	}
 
 	private async ensureFolder(path: string): Promise<void> {
-		const normalized = normalizePath(path);
+		const normalized = normalizeVaultPath(path);
 		const existing = this.app.vault.getAbstractFileByPath(normalized);
 		if (existing instanceof TFolder) {
 			return;
@@ -1153,7 +1700,7 @@ export class OKRManager {
 
 		const parts = normalized.split("/");
 		for (let index = 1; index <= parts.length; index += 1) {
-			const currentPath = normalizePath(parts.slice(0, index).join("/"));
+			const currentPath = normalizeVaultPath(parts.slice(0, index).join("/"));
 			if (!currentPath) {
 				continue;
 			}
@@ -1199,11 +1746,11 @@ export class OKRManager {
 	}
 
 	private getPeriodDir(period: string): string {
-		return normalizePath(`${this.settings.rootDir}/${period}`);
+		return normalizeVaultPath(`${this.settings.rootDir}/${period}`);
 	}
 
 	private extractPeriodFromPath(path: string): string | null {
-		const rootDir = normalizePath(this.settings.rootDir);
+		const rootDir = normalizeVaultPath(this.settings.rootDir);
 		if (!path.startsWith(`${rootDir}/`)) {
 			return null;
 		}

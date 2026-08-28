@@ -144,6 +144,7 @@ export default class OKRPlugin extends Plugin {
 				this.i18n.t("migration.legacyProgressRecordsCompleted", {
 					scanned: result.scanned,
 					migrated: result.migrated,
+					skipped: result.skippedPeriods ?? 0,
 				}),
 			);
 			this.refreshDashboard();

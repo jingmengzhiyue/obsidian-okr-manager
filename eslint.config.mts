@@ -11,7 +11,11 @@ export default tseslint.config(
 			},
 			parserOptions: {
 				projectService: {
-					allowDefaultProject: ["eslint.config.js", "manifest.json"],
+					allowDefaultProject: [
+						"eslint.config.*",
+						"manifest.json",
+						"tests/*.test.mjs",
+					],
 				},
 				tsconfigRootDir: import.meta.dirname,
 				extraFileExtensions: [".json"],
@@ -19,12 +23,20 @@ export default tseslint.config(
 		},
 	},
 	...obsidianmd.configs.recommended,
+	{
+		files: ["tests/**/*.mjs"],
+		rules: {
+			"obsidianmd/no-global-this": "off",
+			"obsidianmd/no-nodejs-modules": "off",
+			"obsidianmd/prefer-window-timers": "off",
+		},
+	},
 	globalIgnores([
 		"node_modules",
 		"dist",
 		".history",
 		"esbuild.config.mjs",
-		"eslint.config.js",
+		"eslint.config.*",
 		"version-bump.mjs",
 		"versions.json",
 		"main.js",

@@ -1,5 +1,7 @@
 export const OKR_TYPE_OBJECTIVE = "objective";
 export const OKR_TYPE_CHECK_IN = "check-in";
+export const OKR_TYPE_PERIOD = "period";
+export const OKR_TYPE_PERIOD_TEMPLATE = "period-template";
 
 export const FRONTMATTER_OKR_TYPE = "okr-type";
 export const FRONTMATTER_OKR_ID = "okr-id";
@@ -23,6 +25,15 @@ export const FRONTMATTER_NOTE = "note";
 export const FRONTMATTER_BLOCKER = "blocker";
 export const FRONTMATTER_TAGS = "tags";
 export const FRONTMATTER_KEY_RESULTS = "key-results";
+export const FRONTMATTER_CREATED_AT = "created-at";
+export const FRONTMATTER_CLOSED_AT = "closed-at";
+export const FRONTMATTER_ARCHIVED_AT = "archived-at";
+export const FRONTMATTER_ROLLOVERS = "rollovers";
+export const FRONTMATTER_ROLLOVER_FROM = "rollover-from";
+export const FRONTMATTER_TEMPLATE_ID = "template-id";
+export const FRONTMATTER_TEMPLATE_NAME = "template-name";
+export const FRONTMATTER_TEMPLATE_VERSION = "template-version";
+export const FRONTMATTER_OBJECTIVES = "objectives";
 
 export const OKR_KR_LIST_START = "<!-- OKR-KR-LIST -->";
 export const OKR_KR_LIST_END = "<!-- /OKR-KR-LIST -->";
@@ -31,6 +42,9 @@ export const OKR_CHECKINS_END = "<!-- OKR-CHECKINS-END -->";
 
 export const DEFAULT_ROOT_DIR = "OKR";
 export const DEFAULT_CHECKINS_DIR = "OKR/Check-ins";
+export const PERIOD_METADATA_FILE = "_period.md";
+export const PERIOD_TEMPLATES_DIR = "Templates";
+export const PERIOD_TEMPLATE_VERSION = 1;
 export const CHECK_IN_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 export const YEAR_PERIOD_PATTERN = /^\d{4}$/;
 export const QUARTER_PERIOD_PATTERN = /^\d{4}-Q[1-4]$/;

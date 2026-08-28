@@ -6,7 +6,7 @@ Plan, track, and review Objectives and Key Results directly inside your Obsidian
 
 ![Obsidian](https://img.shields.io/badge/Obsidian-%3E%3D1.7.2-blueviolet)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Version](https://img.shields.io/badge/version-1.2.2-blue)
+![Version](https://img.shields.io/badge/version-1.3.0-blue)
 
 [中文文档](./README.zh-CN.md) · [Features](#features) · [Installation](#installation) · [Quick Start](#quick-start) · [Usage](#usage) · [FAQ](#faq)
 
@@ -39,6 +39,9 @@ The plugin is local-first by design:
 - One file per objective with embedded key result state and progress history
 - Dashboard view for browsing objectives by period
 - Weekly, monthly, quarterly, and yearly planning cycles
+- Period close/reopen/archive lifecycle with read-only enforcement
+- Selective rollover of unfinished objectives and key results
+- Reusable Markdown-backed period templates
 - Automatic progress calculation for key results and objectives
 - Built-in progress recording workflow with multiple updates per day
 - Drag-and-drop key result ordering in the dashboard
@@ -198,6 +201,29 @@ If Obsidian is using Simplified Chinese, the plugin UI and command names switch 
 | Quarter | `YYYY-Qn`  | `2026-Q2`  |
 | Year    | `YYYY`     | `2026`     |
 
+### Period lifecycle, rollover, and templates
+
+Each period starts as `open`. The period menu in the dashboard can close it, reopen it, archive it after closing, or unarchive it. Closed and archived periods remain readable, but all Objective/KR creation, editing, check-in, ordering, postponement, and deletion operations are rejected at the manager boundary. Archived periods are hidden by default; enable **Show archived** to view them.
+
+Closing a period opens a rollover wizard. It defaults to the next period of the same type and selects all unfinished objectives and KRs. You can change the target or deselect individual items. Rolled KRs preserve their current value and progress, while their state and dates are reset for the new period and their check-in history starts empty. A close operation writes the source status only after all target files succeed; newly created files are moved to the trash if the operation fails.
+
+Use **Save as template** to store selected structure, then **Period templates** to apply or delete templates. Templates preserve titles, descriptions, owners, KR units, targets, confidence, and order. They can only be applied to an open, empty period of the same type; current values and progress start at zero.
+
+Lifecycle metadata and templates are stored alongside normal Markdown data:
+
+```text
+OKR/
+├── 2026-Q2/
+│   ├── _period.md
+│   └── O1.md
+└── Templates/
+    └── Quarterly planning.md
+```
+
+`_period.md` uses `okr-type: period`; template files use `okr-type: period-template`. Existing period folders without `_period.md` remain implicitly open and are not migrated. Logical archiving never moves a folder, so links and paths remain stable. Custom fields added to `_period.md` are preserved when the plugin changes status.
+
+Downgrading to a version older than 1.3.0 keeps the files readable, but the older plugin ignores lifecycle metadata and cannot enforce read-only periods. It may also discard `rollover-from` when it rewrites a rolled objective. Back up or commit your vault before downgrading.
+
 ### Objective file model
 
 Each objective file stores:
@@ -297,7 +323,7 @@ This version does not support the old prototype where:
 
 If you previously used that prototype, reorganize standalone files into the current objective-based structure manually.
 
-If your existing objective files still store progress history in frontmatter `checkIns` arrays, version 1.2.2 continues to read that data. Run **Migrate legacy progress records** to migrate old records across the current OKR directory in one pass. You can also let the next plugin write, such as recording progress, editing a key result, reordering key results, or updating an objective, convert that file's legacy `checkIns` entries into the Markdown progress section and remove the history arrays from frontmatter.
+If your existing objective files still store progress history in frontmatter `checkIns` arrays, version 1.3.0 continues to read that data. Run **Migrate legacy progress records** to migrate old records across open periods in the current OKR directory in one pass; closed and archived periods are reported as skipped. You can also let the next plugin write, such as recording progress, editing a key result, reordering key results, or updating an objective, convert that file's legacy `checkIns` entries into the Markdown progress section and remove the history arrays from frontmatter.
 
 ## FAQ
 
@@ -343,7 +369,7 @@ The following backlog is based on a review of the current implementation, with p
 
 ### P1: Core OKR workflow completeness
 
-- [ ] Add cycle planning tools such as templates, carry-forward of unfinished items, and archive/close-cycle actions
+- [x] Add cycle planning tools such as templates, carry-forward of unfinished items, and archive/close-cycle actions
 - [ ] Add structured review workflows for weekly check-ins, mid-cycle reviews, and end-of-cycle retrospectives
 - [ ] Add dashboard filters and search for owner, status, period, and overdue state
 - [ ] Enrich check-ins with next steps, risk level, milestone notes, and evidence links
