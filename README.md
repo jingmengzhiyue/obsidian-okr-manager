@@ -2,89 +2,70 @@
 
 # Vault OKR Manager
 
-Plan, track, and review Objectives and Key Results directly inside your Obsidian vault with a dedicated dashboard, embedded progress history, and local-first Markdown storage.
+A local-first Obsidian plugin for planning weighted OKRs, monitoring execution health, recording check-ins, and running structured period reviews in Markdown.
 
 ![Obsidian](https://img.shields.io/badge/Obsidian-%3E%3D1.7.2-blueviolet)
+![Version](https://img.shields.io/badge/version-1.4.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Version](https://img.shields.io/badge/version-1.3.0-blue)
 
-[中文文档](./README.zh-CN.md) · [Features](#features) · [Installation](#installation) · [Quick Start](#quick-start) · [Usage](#usage) · [FAQ](#faq)
+[中文文档](./README.zh-CN.md) · [Release notes](./docs/releases/1.4.0.md) · [Features](#features) · [Quick start](#quick-start) · [Health model](#progress-and-health-model) · [Review workflows](#structured-review-workflows) · [Storage](#markdown-storage-model)
 
 </div>
 
-***
+---
 
-![snapshot](assets/OKR.gif)
+![Vault OKR Manager dashboard](assets/OKR.gif)
 
 ## Overview
 
-Vault OKR Manager is an Obsidian community plugin for managing OKRs entirely inside your vault.
+Vault OKR Manager keeps the complete OKR operating cycle inside an Obsidian vault: define objectives, weight key results, record progress, identify execution risk, conduct recurring reviews, close a period, and selectively roll unfinished work forward.
 
-The plugin keeps each objective in a single Markdown file and stores:
+All durable data is stored as readable Markdown and YAML. The plugin uses no external database, cloud service, telemetry, or account, so the vault remains portable and suitable for Obsidian Sync, file backups, and Git-based workflows.
 
-- objective and key result current state in YAML frontmatter
-- readable check-in history in the `## 进度记录` Markdown section
-
-This storage model keeps your vault cleaner than one-file-per-KR or one-file-per-check-in approaches while still remaining readable, portable, and version-control friendly.
-
-The plugin is local-first by design:
-
-- no external database
-- no cloud dependency
-- no telemetry
-- no data leaves your vault
+Version 1.4.0 replaces equal-only KR aggregation with relative weights, introduces a schedule-aware health assessment that is intentionally separate from completion progress, and adds weekly review, mid-cycle review, and cycle retrospective workflows.
 
 ## Features
 
-- One file per objective with embedded key result state and progress history
-- Dashboard view for browsing objectives by period
-- Weekly, monthly, quarterly, and yearly planning cycles
-- Period close/reopen/archive lifecycle with read-only enforcement
-- Selective rollover of unfinished objectives and key results
-- Reusable Markdown-backed period templates
-- Automatic progress calculation for key results and objectives
-- Built-in progress recording workflow with multiple updates per day
-- Drag-and-drop key result ordering in the dashboard
-- Overdue objective indicators, reminders, and due date postponement
-- English by default, with Simplified Chinese support
-- Works with Obsidian sync and Git-based workflows because data stays in Markdown
+| Area | Capability |
+| --- | --- |
+| Planning | Weekly, monthly, quarterly, and yearly periods; one Markdown file per Objective |
+| Measurement | Numeric, percentage, score, and Boolean KRs; positive relative KR weights |
+| Progress | Automatic KR calculation and weighted Objective aggregation |
+| Health | On track, at risk, and off track assessments based on schedule, confidence, blockers, hold state, and overdue state |
+| Check-ins | Multiple dated progress records, notes, deltas, and active blocker tracking |
+| Reviews | Repeatable weekly reviews, one mid-cycle review, and one retrospective per period |
+| Evidence | Immutable progress and health snapshot captured when each review is created |
+| Lifecycle | Close, reopen, archive, read-only enforcement, and selective rollover |
+| Reuse | Markdown-backed period templates that retain KR weights |
+| Interface | Dashboard, Objective detail tables, drag-and-drop KR ordering, overdue reminders, and due-date postponement |
+| Language | English and Simplified Chinese interface |
+| Privacy | Local-only Markdown storage with no network dependency or telemetry |
 
 ## Requirements
 
-| Item         | Requirement                         |
-| ------------ | ----------------------------------- |
-| Obsidian     | `1.7.2` or later                    |
-| Platform     | Windows, macOS, Linux, iOS, Android |
-| Plugin ID    | `vault-okr-manager`                 |
-| Desktop only | `false`                             |
+| Item | Requirement |
+| --- | --- |
+| Obsidian | `1.7.2` or later |
+| Platform | Windows, macOS, Linux, iOS, Android |
+| Plugin ID | `vault-okr-manager` |
+| Desktop-only | No |
 
 ## Installation
 
-### Community plugins directory
+### Community plugins
 
-If the plugin is available in the official Obsidian community plugins directory:
+If the plugin is available in Obsidian's community directory:
 
-1. Open Obsidian.
-2. Go to **Settings → Community plugins**.
-3. Disable safe mode if needed.
-4. Select **Browse**.
-5. Search for `Vault OKR Manager`.
-6. Install the plugin.
-7. Enable the plugin.
+1. Open **Settings → Community plugins**.
+2. Select **Browse** and search for `Vault OKR Manager`.
+3. Install and enable the plugin.
 
 ### Manual installation
 
-1. Open the latest release page: [Releases](https://github.com/jingmengzhiyue/obsidian-okr-manager/releases/latest)
-2. Download these release assets:
-   - `main.js`
-   - `manifest.json`
-   - `styles.css`
-3. Open your vault folder.
-4. Go to `.obsidian/plugins/`.
-5. Create a folder named `vault-okr-manager`.
-6. Copy the three files into that folder.
-7. Restart Obsidian or reload community plugins.
-8. Enable **Vault OKR Manager** in **Settings → Community plugins**.
+1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/jingmengzhiyue/obsidian-okr-manager/releases/latest).
+2. Create `.obsidian/plugins/vault-okr-manager/` inside the vault.
+3. Copy the three files into that directory.
+4. Reload Obsidian and enable **Vault OKR Manager** under **Community plugins**.
 
 ```text
 YourVault/
@@ -96,326 +77,198 @@ YourVault/
             └── styles.css
 ```
 
-## Quick Start
+## Quick start
 
-### 1. Review the settings
+### 1. Configure the plugin
 
-Open **Settings → Vault OKR Manager** and review the defaults:
+Open **Settings → Vault OKR Manager**.
 
-| Setting                     | Default   | Description                                                       |
-| --------------------------- | --------- | ----------------------------------------------------------------- |
-| `Objective directory`       | `OKR`     | Root folder for all objective files                               |
-| `Default period type`       | `quarter` | Default period type for new objectives                            |
-| `Auto-calculate progress`   | `true`    | Recalculate progress automatically from current and target values |
-| `Open dashboard on startup` | `false`   | Automatically open the dashboard when Obsidian starts             |
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| Objective directory | `OKR` | Root folder for periods, objectives, templates, and reviews |
+| Default period type | `quarter` | Initial period type in the new Objective form |
+| Auto-calculate progress | Enabled | Derive KR progress from current and target values |
+| Open dashboard on startup | Disabled | Open the dashboard after the workspace is ready |
 
-### 2. Create your first objective
+### 2. Create an Objective and weighted KRs
 
-1. Open the command palette with `Ctrl+P` or `Cmd+P`.
-2. Run **New objective**.
-3. Choose a period type:
-   - Week
-   - Month
-   - Quarter
-   - Year
-4. Enter a period value:
-   - Week: `2026-W20`
-   - Month: `2026-05`
-   - Quarter: `2026-Q2`
-   - Year: `2026`
-5. Enter a title, owner, description, and due date.
-6. Select **Create**.
+1. Run **Vault OKR Manager: New objective** from the command palette.
+2. Choose a period and provide the title, owner, dates, and optional description.
+3. Run **New key result**, or add a KR from the Objective card.
+4. Set a positive relative weight. A value of `1` is the default.
 
-The plugin creates a file such as `OKR/2026-Q2/O1.md`.
+Weights are relative, so `2, 1, 1` means 50%, 25%, and 25%. They do not need to total 100.
 
-### 3. Add key results
+### 3. Record progress
 
-1. Run **New key result**.
-2. Select the period and the objective.
-3. Enter the key result title, owner, unit, current value, target value, confidence, and due date if needed.
-4. Select **Create**.
+Run **Record progress** or use a KR action. A check-in records the date, progress, current value when applicable, note, blocker, delta, and timestamp. The blocker entered on the latest check-in becomes the KR's active blocker signal; a later check-in with an empty blocker clears it.
 
-No separate key result file is created. The new key result is stored inside the objective file.
+### 4. Monitor progress and health
 
-### 4. Record progress
+Open the dashboard from the ribbon or run **Open dashboard**. Objective cards and KR rows show completion, weights, normalized weight shares, confidence, and health. Hover a health badge to see the active risk reasons.
 
-1. Run **Record progress**.
-2. Select a key result.
-3. Enter the latest current value or adjust the progress directly.
-4. Optionally add notes and blockers.
-5. Save the update.
+### 5. Run reviews and close the period
 
-Progress history is appended to the objective file's `## 进度记录` section, so multiple updates on the same day are supported without creating extra files.
+Run **Period reviews** or choose **Period reviews** from the period menu. Create weekly reviews during execution, a mid-cycle review when priorities need formal adjustment, and a retrospective before closing. Closing without a retrospective remains possible, but requires explicit confirmation.
 
-With automatic calculation enabled, editing the current value calculates progress from `current / target`. Editing the percentage last preserves that percentage and derives an exact, non-rounded current value. With automatic calculation disabled, the current value and percentage are stored independently.
+## Progress and health model
 
-Boolean key results use discrete values: the current value must be `0` or `1`, the target must be `1`, and check-in progress must be `0%` or `100%`.
+Progress and health answer different questions:
 
-### 5. Open the dashboard
+- **Progress**: How much of the measurable result is complete?
+- **Health**: Given time, confidence, blockers, and status, how likely is execution to remain on track?
 
-1. Run **Open dashboard**.
-2. Review objectives, key results, progress, overdue status, and due dates in the sidebar.
-3. Drag key results to reorder them when needed.
+### Weighted Objective progress
 
-## Usage
-
-### Storage model
-
-The default structure looks like this:
+Cancelled KRs are excluded. For all other KRs:
 
 ```text
-OKR/
-└── 2026-Q2/
-    ├── O1.md
-    └── O2.md
+Objective progress = Σ(KR progress × KR weight) / Σ(KR weight)
 ```
 
-The plugin no longer creates:
+The result is rounded and clamped to 0–100. Existing files without `weight` are treated as weight `1`, preserving the earlier equal-average behavior until weights are changed.
 
-- one file per key result
-- one file per check-in
-- a dedicated `Check-ins` settings path
+### KR health score
 
-Instead, each objective file contains all related data: frontmatter stores the current state, and the Markdown body stores readable progress logs.
+Expected progress advances linearly from `created` to `due` and is clamped to 0–100. An active KR begins at 100 and receives these deductions:
 
-### Commands
+| Signal | Effect |
+| --- | ---: |
+| Behind schedule | `expected progress − actual progress` when positive |
+| Medium confidence | −5 |
+| Low confidence | −15 |
+| Active blocker from latest check-in | −20 |
+| On hold | −25 and maximum score 79 |
+| Overdue and incomplete | Maximum score 59 |
 
-Command labels follow the active plugin language. In English, the commands are:
+Completed KRs score 100. Cancelled KRs are not applicable. Scores map to:
 
-| Command           | Description                               |
-| ----------------- | ----------------------------------------- |
-| `New objective`   | Create a new objective                    |
-| `New key result`  | Add a key result to an objective          |
-| `Record progress` | Record a progress update for a key result |
-| `Open dashboard`  | Open or focus the OKR dashboard           |
-| `Migrate legacy progress records` | Batch migrate old frontmatter progress records into Markdown |
+| Score | Status |
+| ---: | --- |
+| 80–100 | On track |
+| 60–79 | At risk |
+| 0–59 | Off track |
 
-If Obsidian is using Simplified Chinese, the plugin UI and command names switch to Chinese automatically.
+Objective health is the weighted aggregation of eligible KR health scores, with Objective-level on-hold and overdue caps applied afterward. Health is a transparent operating signal, not a forecast or a substitute for review judgment.
 
-### Period formats
+## Structured review workflows
 
-| Type    | Format     | Example    |
-| ------- | ---------- | ---------- |
-| Week    | `YYYY-Www` | `2026-W20` |
-| Month   | `YYYY-MM`  | `2026-05`  |
-| Quarter | `YYYY-Qn`  | `2026-Q2`  |
-| Year    | `YYYY`     | `2026`     |
+### Weekly review
 
-### Period lifecycle, rollover, and templates
+Repeatable by date. The form includes summary, wins, blockers, and next steps. Summary and next steps are required.
 
-Each period starts as `open`. The period menu in the dashboard can close it, reopen it, archive it after closing, or unarchive it. Closed and archived periods remain readable, but all Objective/KR creation, editing, check-in, ordering, postponement, and deletion operations are rejected at the manager boundary. Archived periods are hidden by default; enable **Show archived** to view them.
+### Mid-cycle review
 
-Closing a period opens a rollover wizard. It defaults to the next period of the same type and selects all unfinished objectives and KRs. You can change the target or deselect individual items. Rolled KRs preserve their current value and progress, while their state and dates are reset for the new period and their check-in history starts empty. A close operation writes the source status only after all target files succeed; newly created files are moved to the trash if the operation fails.
+One per period. The form includes summary, achievements, risks, adjustments, and decisions. Summary and decisions are required.
 
-Use **Save as template** to store selected structure, then **Period templates** to apply or delete templates. Templates preserve titles, descriptions, owners, KR units, targets, confidence, and order. They can only be applied to an open, empty period of the same type; current values and progress start at zero.
+### Cycle retrospective
 
-Lifecycle metadata and templates are stored alongside normal Markdown data:
+One per period. The form includes summary, outcomes, what worked, what did not work, lessons learned, and follow-up actions. Summary, lessons, and follow-up actions are required.
+
+When a review is created, the plugin captures an immutable snapshot containing every Objective and KR's status, progress, weight, normalized share, health score, expected progress, and risk reasons. Editing the review changes only its narrative sections. It never changes Objectives, KRs, check-ins, or the captured snapshot.
+
+Closed and archived periods are read-only: reviews can be opened but not created, edited, or deleted. Reopening a closed period restores write access.
+
+## Period lifecycle
+
+```text
+Open → Closed → Archived
+  ↑       ↓          ↓
+  └── Reopen     Unarchive → Closed
+```
+
+- **Open** periods accept Objective, KR, check-in, review, template, and rollover-related writes.
+- **Closed** periods are read-only and can be reopened or archived.
+- **Archived** periods remain discoverable when **Show archived** is enabled and can be unarchived back to Closed.
+- Closing can selectively roll unfinished Objectives and KRs into the next compatible period.
+- Rollover retains KR weights and current progress, clears check-in history and active blocker state, and records the source Objective.
+
+## Markdown storage model
+
+With the default root directory, the vault uses this structure:
 
 ```text
 OKR/
-├── 2026-Q2/
+├── 2026-Q3/
 │   ├── _period.md
-│   └── O1.md
+│   ├── O1.md
+│   └── Reviews/
+│       ├── weekly-2026-08-07.md
+│       ├── weekly-2026-08-14.md
+│       ├── mid-cycle.md
+│       └── retrospective.md
 └── Templates/
-    └── Quarterly planning.md
+    └── Product-quarter.md
 ```
 
-`_period.md` uses `okr-type: period`; template files use `okr-type: period-template`. Existing period folders without `_period.md` remain implicitly open and are not migrated. Logical archiving never moves a folder, so links and paths remain stable. Custom fields added to `_period.md` are preserved when the plugin changes status.
+Each Objective file contains Objective metadata and its KR array in YAML frontmatter. KR entries include `weight` and `has-blocker`. Human-readable check-ins remain in a managed Markdown section in the same file.
 
-Downgrading to a version older than 1.3.0 keeps the files readable, but the older plugin ignores lifecycle metadata and cannot enforce read-only periods. It may also discard `rollover-from` when it rewrites a rolled objective. Back up or commit your vault before downgrading.
+Review files contain:
 
-### Objective file model
+- typed review metadata and timestamps in frontmatter;
+- a serialized immutable snapshot in frontmatter;
+- a readable snapshot table in a managed Markdown block;
+- structured narrative sections between stable markers;
+- any custom Markdown outside managed blocks, which is preserved when the plugin updates the review.
 
-Each objective file stores:
+Do not remove managed markers unless you intend to repair the file manually. Ordinary text outside those markers remains yours.
 
-- objective metadata
-- a `key-results` array for current key result state
-- a `## 进度记录` section for check-in history
-- a reserved block for plugin-rendered key result content
+## Commands
 
-Example:
+| Command | Purpose |
+| --- | --- |
+| New objective | Create an Objective in a selected period |
+| New key result | Add a weighted KR to an Objective |
+| Record progress | Append a check-in and update current progress/blocker state |
+| Open dashboard | Open or reveal the OKR dashboard |
+| Period reviews | Browse, create, edit, open, or delete period reviews |
+| Migrate legacy progress records | Move legacy frontmatter check-ins into readable Markdown sections for open periods |
 
-```markdown
----
-okr-type: objective
-okr-id: O1
-okr-period: 2026-Q2
-okr-period-type: quarter
-title: Improve engineering quality
-owner: Team Lead
-status: active
-progress: 68
-due: 2026-06-30
-key-results:
-  - okr-id: O1-KR1
-    title: Reach 100% review coverage
-    current: 80
-    target: 100
-    progress: 80
-    order: 0
----
+Additional lifecycle, template, review, edit, delete, reorder, and postpone actions are available from the dashboard and Objective detail view.
 
-## Background
+## Compatibility and upgrades
 
-Improve engineering quality.
-
-## Key Results
-
-<!-- OKR-KR-LIST -->
-The plugin renders the KR list here.
-<!-- /OKR-KR-LIST -->
-
-## 进度记录
-
-<!-- OKR-CHECKINS-START -->
-### O1-KR1 进度记录
-
-- **2026-05-18** 80% (+10) `O1-KR1-1740000000000`
-  - recordedAt: 2026-05-18T09:00:00.000Z
-  - note: Improved review coverage for backend modules
-  - blocker:
-<!-- OKR-CHECKINS-END -->
-```
-
-### Progress rules
-
-Key result progress:
-
-- `boolean` becomes `100%` when completed, otherwise `0%`
-- other numeric units use `current / target * 100`
-- if `target <= 0`, progress is `0%`
-- progress is clamped to `0–100`
-
-Objective progress:
-
-- average of all non-cancelled key results
-- `0%` when no valid key results exist
-
-### Reordering key results
-
-- The dashboard supports drag-and-drop reordering.
-- The updated order is written back to the objective file.
-- The detail renderer still provides move actions as a fallback interaction.
-
-### Overdue objectives
-
-If an objective is past its due date and is not completed or cancelled, the plugin:
-
-- marks it as overdue
-- shows a reminder in the dashboard
-- highlights it visually
-- lets you postpone the due date from the dashboard or detail view
-
-### Language behavior
-
-- Default language: English
-- Supported language: Simplified Chinese (`zh-CN`)
-- Unknown or unsupported locales fall back to English
-- Existing notes are not rewritten automatically when you change the UI language
-
-### Legacy data model
-
-This version does not support the old prototype where:
-
-- each key result had its own Markdown file
-- progress updates were stored as standalone check-in files
-- a separate check-in directory was configurable in settings
-
-If you previously used that prototype, reorganize standalone files into the current objective-based structure manually.
-
-If your existing objective files still store progress history in frontmatter `checkIns` arrays, version 1.3.0 continues to read that data. Run **Migrate legacy progress records** to migrate old records across open periods in the current OKR directory in one pass; closed and archived periods are reported as skipped. You can also let the next plugin write, such as recording progress, editing a key result, reordering key results, or updating an objective, convert that file's legacy `checkIns` entries into the Markdown progress section and remove the history arrays from frontmatter.
+- Version 1.4.0 reads 1.3.x Objective files without migration. Missing KR weights default to `1`; active blocker state is derived from the latest check-in when the field is absent.
+- Period templates created with schema version 1 remain readable and receive default KR weight `1`.
+- The existing legacy check-in migration command remains available and skips closed or archived periods.
+- Before downgrading below 1.4.0, back up or commit the vault. Older plugin versions ignore review files and may discard `weight` or `has-blocker` when rewriting an Objective.
 
 ## FAQ
 
-### Does the plugin create a separate file for every key result?
+### Do weights need to add up to 100?
 
-No. Key results are embedded inside the objective file.
+No. They are relative positive values. The plugin normalizes them for display and calculation.
 
-### Does the plugin still create a `Check-ins` folder?
+### Why can progress be high while health is low?
 
-No. Progress history is stored in the objective file's Markdown progress section.
+Progress reports completion only. Health also considers how far through the schedule the KR should be, confidence, the latest blocker, hold state, and overdue state.
 
-### Can I record progress multiple times on the same day?
+### Can I edit review Markdown directly?
 
-Yes. Multiple updates on the same day are supported.
+Yes. Keep the managed markers intact. Text inside structured section markers can be read back into the editor, and custom text outside managed blocks is preserved.
 
-### What happens when an objective becomes overdue?
+### Does a review change my OKRs?
 
-The dashboard shows an overdue indicator and reminder, and you can postpone the due date directly from the UI.
+No. Review creation captures evidence; review editing only changes narrative content.
 
-### Does this plugin send data to any online service?
+### Can I close a period without a retrospective?
 
-No. The plugin stores everything in your local vault.
-
-### Can I use week and month periods instead of quarter periods?
-
-Yes. The plugin supports week, month, quarter, and year period types.
-
-### Can I use it on mobile?
-
-Yes. The plugin is not desktop-only.
-
-## Roadmap
-
-The following backlog is based on a review of the current implementation, with priorities ordered by reliability, performance, and product completeness.
-
-### P0: Reliability and responsiveness
-
-- [x] Refresh the current Markdown preview immediately after inline actions such as check-in, edit, delete, add key result, and postpone due date
-- [x] Reduce duplicate dashboard refreshes triggered by both modal callbacks and vault metadata events
-- [x] Replace full-vault objective discovery with directory-scoped lookup under the configured OKR root
-- [x] Add frontmatter summary caching for the dashboard, detail view, and progress picker so they do not read complete progress-history bodies
-- [ ] Add a fast key-result-to-objective index to avoid cross-period scans in APIs that do not receive a period
-
-### P1: Core OKR workflow completeness
-
-- [x] Add cycle planning tools such as templates, carry-forward of unfinished items, and archive/close-cycle actions
-- [ ] Add structured review workflows for weekly check-ins, mid-cycle reviews, and end-of-cycle retrospectives
-- [ ] Add dashboard filters and search for owner, status, period, and overdue state
-- [ ] Enrich check-ins with next steps, risk level, milestone notes, and evidence links
-
-### P2: Management depth and reporting
-
-- [ ] Support weighted key results or more advanced health scoring beyond simple averaging
-- [ ] Add progress trend views and summary reports for a period
-- [ ] Add export options for Markdown or CSV summaries
-- [ ] Improve multi-owner and team-oriented management beyond single free-text owner fields
+Yes, after a dedicated warning and explicit confirmation. This makes exceptions possible without making silent omission the default.
 
 ## Development
 
-Requires Node.js `20` or later.
-
 ```bash
-git clone https://github.com/jingmengzhiyue/obsidian-okr-manager.git
-cd obsidian-okr-manager
 npm install
 npm run dev
-```
-
-Useful commands:
-
-```bash
-npm run build
-npm run lint
 npm test
+npm run lint
+npm run build
 ```
 
-Before publishing a release:
+The production release bundle consists of `main.js`, `manifest.json`, and `styles.css`. Node.js 20 or later is required for development.
 
-1. Update `manifest.json`
-2. Update `package.json`
-3. Update `versions.json`
-4. Run `npm run build`
-5. Confirm `main.js`, `manifest.json`, and `styles.css` are attached to the GitHub release as individual assets
+## Privacy and license
 
-## Privacy
+Vault OKR Manager does not send vault content to external services and does not include telemetry. Review your own Obsidian Sync, backup, or Git configuration separately because those tools may copy vault files.
 
-Vault OKR Manager runs locally inside your vault:
-
-- no remote execution
-- no hidden telemetry
-- no external API requirement
-
-## License
-
-This project is licensed under the [MIT License](./LICENSE).
+Released under the [MIT License](./LICENSE).

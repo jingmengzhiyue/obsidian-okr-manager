@@ -14,6 +14,7 @@ import {
 	FRONTMATTER_CURRENT,
 	FRONTMATTER_DESCRIPTION,
 	FRONTMATTER_DUE,
+	FRONTMATTER_HAS_BLOCKER,
 	FRONTMATTER_KEY_RESULTS,
 	FRONTMATTER_OKR_ID,
 	FRONTMATTER_OKR_PERIOD,
@@ -25,6 +26,7 @@ import {
 	FRONTMATTER_TARGET,
 	FRONTMATTER_TITLE,
 	FRONTMATTER_UNIT,
+	FRONTMATTER_WEIGHT,
 	KEY_RESULT_ID_PATTERN,
 	MONTH_PERIOD_PATTERN,
 	OKR_CHECKINS_END,
@@ -36,6 +38,8 @@ import {
 } from "../constants";
 import { formatLocalDate } from "../utils/date";
 import { CheckIn } from "../types";
+import { calculateObjectiveProgress } from "../utils/health";
+import { isValidKeyResultWeight } from "../utils/validation";
 
 export class FileParser {
 	constructor(private app: App) {}
@@ -304,18 +308,7 @@ export class FileParser {
 	}
 
 	calculateObjectiveProgress(keyResults: KeyResult[]): number {
-		const activeKeyResults = keyResults.filter(
-			(keyResult) => keyResult.status !== "cancelled",
-		);
-		if (activeKeyResults.length === 0) {
-			return 0;
-		}
-
-		const total = activeKeyResults.reduce(
-			(sum, keyResult) => sum + this.clampProgress(keyResult.progress),
-			0,
-		);
-		return this.clampProgress(total / activeKeyResults.length);
+		return calculateObjectiveProgress(keyResults);
 	}
 
 	buildObjectiveFrontmatter(objective: Objective): Record<string, unknown> {
@@ -567,6 +560,23 @@ export class FileParser {
 		const target = this.parseNumber(record[FRONTMATTER_TARGET]);
 		const unit = this.parseUnit(record[FRONTMATTER_UNIT]);
 		const storedProgress = this.parseNumber(record[FRONTMATTER_PROGRESS]);
+		const rawWeight = record[FRONTMATTER_WEIGHT];
+		const weight =
+			rawWeight == null ? 1 : this.parseNumber(rawWeight, Number.NaN);
+		if (!isValidKeyResultWeight(weight)) {
+			throw new Error(
+				`Invalid Key Result weight at index ${index} in ${context.filePath}`,
+			);
+		}
+		const checkIns = this.mergeCheckIns(
+			context.checkInsByKrId.get(id) ?? [],
+			this.parseCheckIns(record.checkIns, id),
+		);
+		const storedHasBlocker = record[FRONTMATTER_HAS_BLOCKER];
+		const hasBlocker =
+			typeof storedHasBlocker === "boolean"
+				? storedHasBlocker
+				: (checkIns[0]?.blocker.trim().length ?? 0) > 0;
 
 		return {
 			id,
@@ -578,6 +588,7 @@ export class FileParser {
 			description: this.parseString(record[FRONTMATTER_DESCRIPTION]),
 			owner: this.parseString(record[FRONTMATTER_OWNER]),
 			unit,
+			weight,
 			current,
 			target,
 			progress: this.clampProgress(
@@ -590,10 +601,8 @@ export class FileParser {
 			created: this.parseString(record[FRONTMATTER_CREATED]),
 			due: this.parseString(record[FRONTMATTER_DUE]),
 			filePath: context.filePath,
-			checkIns: this.mergeCheckIns(
-				context.checkInsByKrId.get(id) ?? [],
-				this.parseCheckIns(record.checkIns, id),
-			),
+			checkIns,
+			hasBlocker,
 		};
 	}
 
@@ -604,6 +613,7 @@ export class FileParser {
 			[FRONTMATTER_DESCRIPTION]: keyResult.description,
 			[FRONTMATTER_OWNER]: keyResult.owner,
 			[FRONTMATTER_UNIT]: keyResult.unit,
+			[FRONTMATTER_WEIGHT]: keyResult.weight,
 			[FRONTMATTER_CURRENT]: keyResult.current,
 			[FRONTMATTER_TARGET]: keyResult.target,
 			[FRONTMATTER_PROGRESS]: this.clampProgress(keyResult.progress),
@@ -611,6 +621,7 @@ export class FileParser {
 			[FRONTMATTER_CONFIDENCE]: keyResult.confidence,
 			[FRONTMATTER_CREATED]: keyResult.created,
 			[FRONTMATTER_DUE]: keyResult.due,
+			[FRONTMATTER_HAS_BLOCKER]: keyResult.hasBlocker,
 			order: keyResult.order,
 		};
 	}

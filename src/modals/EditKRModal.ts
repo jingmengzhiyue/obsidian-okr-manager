@@ -2,7 +2,10 @@ import { App, Modal, Notice } from "obsidian";
 import { type TranslationValue } from "../i18n";
 import { OKRManager } from "../manager/OKRManager";
 import { Confidence, KeyResult } from "../types";
-import { isValidKeyResultValues } from "../utils/validation";
+import {
+	isValidKeyResultValues,
+	isValidKeyResultWeight,
+} from "../utils/validation";
 
 interface EditKRModalOptions {
 	onComplete?: () => void;
@@ -12,6 +15,7 @@ export class EditKRModal extends Modal {
 	private titleValue: string;
 	private owner: string;
 	private unit: KeyResult["unit"];
+	private weight: number;
 	private current: number;
 	private target: number;
 	private confidence: Confidence;
@@ -31,6 +35,7 @@ export class EditKRModal extends Modal {
 		this.titleValue = keyResult.title;
 		this.owner = keyResult.owner;
 		this.unit = keyResult.unit;
+		this.weight = keyResult.weight;
 		this.current = keyResult.current;
 		this.target = keyResult.target;
 		this.confidence = keyResult.confidence;
@@ -136,6 +141,34 @@ export class EditKRModal extends Modal {
 		unitSelect.value = this.unit;
 		unitSelect.addEventListener("change", () => {
 			this.unit = unitSelect.value as KeyResult["unit"];
+			this.validate();
+		});
+
+		const weightField = contentEl.createDiv("okr-field");
+		this.createRequiredLabel(weightField, this.t("modals.fields.weight"));
+		const weightInput = weightField.createEl("input", {
+			cls: "okr-input",
+			type: "number",
+		});
+		weightInput.value = String(this.weight);
+		weightInput.setAttribute("min", "0.1");
+		weightInput.setAttribute("step", "0.1");
+		const weightError = weightField.createDiv({
+			cls: "okr-input-error",
+			text: this.t("modals.input.weightError"),
+		});
+		weightInput.addEventListener("input", () => {
+			const value = Number(weightInput.value);
+			const valid = isValidKeyResultWeight(value);
+			this.weight = valid ? value : 0;
+			weightInput.toggleClass(
+				"okr-invalid",
+				weightInput.value.length > 0 && !valid,
+			);
+			weightError.toggleClass(
+				"visible",
+				weightInput.value.length > 0 && !valid,
+			);
 			this.validate();
 		});
 
@@ -275,9 +308,12 @@ export class EditKRModal extends Modal {
 				this.owner.length === 0 ||
 				this.due.length === 0 ||
 				targetInput.value.length === 0 ||
+				weightInput.value.length === 0 ||
 				!isValidKeyResultValues(this.unit, this.current, this.target) ||
+				!isValidKeyResultWeight(this.weight) ||
 				targetInput.hasClass("okr-invalid") ||
-				currentInput.hasClass("okr-invalid")
+				currentInput.hasClass("okr-invalid") ||
+				weightInput.hasClass("okr-invalid")
 			);
 			confirmBtn.disabled = !valid;
 			return valid;
@@ -306,6 +342,7 @@ export class EditKRModal extends Modal {
 					description: this.description,
 					owner: this.owner,
 					unit: this.unit,
+					weight: this.weight,
 					current: this.current,
 					target: this.target,
 					status: this.status,

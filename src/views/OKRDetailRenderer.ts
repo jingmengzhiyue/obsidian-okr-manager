@@ -25,6 +25,11 @@ import {
 } from "../constants";
 import { shouldRefreshActivePreview } from "../utils/previewRefresh";
 import { revealLeafCompat } from "../utils/workspace";
+import {
+	calculateKeyResultHealth,
+	calculateObjectiveHealth,
+	getNormalizedKeyResultWeight,
+} from "../utils/health";
 
 export class OKRDetailRenderer {
 	static postProcessor(
@@ -433,6 +438,8 @@ export class OKRDetailRenderer {
 			i18n.t("detail.owner"),
 			i18n.t("detail.progress"),
 			i18n.t("detail.progressPercent"),
+			i18n.t("detail.weight"),
+			i18n.t("detail.health"),
 			i18n.t("detail.confidence"),
 			i18n.t("detail.dueDate"),
 		];
@@ -449,12 +456,13 @@ export class OKRDetailRenderer {
 			const cell = row.createEl("td", {
 				text: i18n.t("detail.emptyKeyResults"),
 			});
-			cell.setAttribute("colspan", writable ? "8" : "7");
+			cell.setAttribute("colspan", writable ? "10" : "9");
 		} else {
 			objective.keyResults.forEach((kr, index) => {
 				tbody.appendChild(
 					this.renderKRTableRow(
 						kr,
+						objective.keyResults,
 						index + 1,
 						objective.keyResults.length,
 						i18n,
@@ -482,6 +490,7 @@ export class OKRDetailRenderer {
 
 	private static renderKRTableRow(
 		kr: KeyResult,
+		keyResults: KeyResult[],
 		index: number,
 		total: number,
 		i18n: I18n,
@@ -509,6 +518,24 @@ export class OKRDetailRenderer {
 		progressFill.setAttribute("style", `width:${kr.progress}%`);
 
 		row.createEl("td", { text: `${kr.progress}%` });
+		row.createEl("td", {
+			text: `${kr.weight} · ${getNormalizedKeyResultWeight(kr, keyResults)}%`,
+		});
+
+		const health = calculateKeyResultHealth(kr);
+		const healthCell = row.createEl("td");
+		const healthBadge = healthCell.createSpan({
+			cls: `okr-health-badge okr-health-${health.status}`,
+			text: `${i18n.t(`health.status.${health.status}`)} ${health.score ?? "—"}`,
+		});
+		healthBadge.setAttribute(
+			"title",
+			health.reasons.length > 0
+				? health.reasons
+						.map((reason) => i18n.t(`health.reason.${reason}`))
+						.join(i18n.t("common.listSeparator"))
+				: i18n.t("health.noRiskSignals"),
+		);
 
 		const confidenceCell = row.createEl("td");
 		confidenceCell.createSpan({
@@ -579,6 +606,11 @@ export class OKRDetailRenderer {
 		bar.className = "okr-inline-action-bar";
 		const summary = createDiv();
 		summary.className = "okr-inline-objective-meta";
+		const health = calculateObjectiveHealth(objective);
+		summary.createSpan({
+			cls: `okr-health-badge okr-health-${health.status}`,
+			text: `${i18n.t("detail.health")}: ${i18n.t(`health.status.${health.status}`)} ${health.score ?? "—"}`,
+		});
 		summary.createSpan({
 			text: deadlineState.helpText ?? deadlineState.label,
 		});

@@ -43,6 +43,7 @@ const { getObjectiveDeadlineState } =
 	objectiveStatusModule.default ?? objectiveStatusModule;
 const {
 	isValidCheckInFields,
+	isValidKeyResultWeight,
 	isValidKeyResultValues,
 	isValidPostponeDate,
 } = validationModule.default ?? validationModule;
@@ -230,6 +231,13 @@ test("form validation rejects zero targets and invalid boolean values", () => {
 		isValidCheckInFields("2026-05-01", "1", "100", "boolean"),
 		true,
 	);
+});
+
+test("KR weights accept positive relative values only", () => {
+	assert.equal(isValidKeyResultWeight(0.1), true);
+	assert.equal(isValidKeyResultWeight(3), true);
+	assert.equal(isValidKeyResultWeight(0), false);
+	assert.equal(isValidKeyResultWeight(Number.NaN), false);
 });
 
 test("check-in and postpone validation enforce submission rules", () => {
@@ -533,6 +541,55 @@ test("recordCheckIn preserves the exact current value entered by the user", asyn
 	});
 
 	assert.equal(writtenObjective.keyResults[0].current, 2.5);
+});
+
+test("the latest check-in sets and clears the active blocker signal", async () => {
+	let stored = createTestObjective({
+		keyResult: { weight: 1, hasBlocker: false },
+	});
+	const manager = new OKRManager({}, DEFAULT_SETTINGS, createI18n("en"));
+	manager.findObjectiveEntryByKRId = async () => ({
+		file: { path: stored.filePath },
+		objective: stored,
+	});
+	manager.mutateObjective = async (_file, mutation) => {
+		stored = mutation(stored);
+		return stored;
+	};
+
+	await manager.recordCheckIn({
+		krId: "O1-KR1",
+		period: "2026-Q2",
+		date: "2026-05-01",
+		progress: 45,
+		note: "Waiting for approval",
+		blocker: "Approval pending",
+	});
+	assert.equal(stored.keyResults[0].hasBlocker, true);
+
+	await manager.recordCheckIn({
+		krId: "O1-KR1",
+		period: "2026-Q2",
+		date: "2026-05-02",
+		progress: 50,
+		note: "Approval received",
+		blocker: "",
+	});
+	assert.equal(stored.keyResults[0].hasBlocker, false);
+});
+
+test("new bilingual health and review labels resolve without key fallbacks", () => {
+	for (const locale of ["en", "zh-CN"]) {
+		const i18n = createI18n(locale);
+		for (const key of [
+			"actions.periodReviews",
+			"health.status.at-risk",
+			"review.type.retrospective",
+			"modals.reviews.snapshotNotice",
+		]) {
+			assert.notEqual(i18n.t(key), key);
+		}
+	}
 });
 
 test("recordCheckIn preserves a percentage-driven update without integer rounding", async () => {

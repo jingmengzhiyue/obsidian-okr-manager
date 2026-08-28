@@ -2,90 +2,70 @@
 
 # Vault OKR Manager
 
-在 Obsidian Vault 中直接规划、追踪和复盘 OKR，提供专用 Dashboard、内嵌进度历史，以及完全本地的 Markdown 存储。
+一个本地优先的 Obsidian OKR 插件，用于在 Markdown 中规划加权 OKR、监控执行健康度、记录进度，并运行结构化周期回顾。
 
 ![Obsidian](https://img.shields.io/badge/Obsidian-%3E%3D1.7.2-blueviolet)
+![Version](https://img.shields.io/badge/version-1.4.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Version](https://img.shields.io/badge/version-1.3.0-blue)
 
-[English README](./README.md) · [功能特性](#功能特性) · [安装方法](#安装方法) · [快速开始](#快速开始) · [使用说明](#使用说明) · [常见问题](#常见问题)
+[English README](./README.md) · [1.4.0 发布说明](./docs/releases/1.4.0.md) · [功能特性](#功能特性) · [快速开始](#快速开始) · [健康度模型](#进度与健康度模型) · [回顾流程](#结构化回顾流程) · [存储模型](#markdown-存储模型)
 
 </div>
 
 ---
 
-![snapshot](assets/OKR.gif)
+![Vault OKR Manager 仪表盘](assets/OKR.gif)
 
-## 简介
+## 产品简介
 
-Vault OKR Manager 是一个 Obsidian 社区插件，用于在你的 Vault 中管理 Objective 和 Key Result。
+Vault OKR Manager 将完整的 OKR 运行闭环保存在 Obsidian Vault 中：制定目标、设置 KR 权重、记录进度、识别执行风险、开展周期回顾、关闭周期，并选择性地结转未完成工作。
 
-当前版本的核心存储模型是：
+所有持久数据都以可读的 Markdown 和 YAML 保存。插件不依赖外部数据库、云服务或账号，不包含遥测；Vault 可继续使用 Obsidian Sync、文件备份或 Git 管理。
 
-- 一个 Objective 对应一个 Markdown 文件
-- 该 Objective 下的所有 KR 当前状态都保存在同一个文件的 YAML frontmatter 中
-- 每次进度更新会追加到正文的 `## 进度记录` 区域，方便阅读和复盘
-
-这种方式比“每个 KR 一个文件”或“每次 Check-in 一个文件”更整洁，也更符合长期维护、同步和版本管理的需要。
-
-插件坚持本地优先：
-
-- 不依赖外部数据库
-- 不依赖云服务
-- 不包含隐藏遥测
-- 不会把 Vault 数据发送到外部
+1.4.0 不再局限于等权平均：它引入 KR 相对权重，将“完成进度”和“执行健康度”明确分离，并新增周回顾、中期评审与周期复盘三类结构化流程。
 
 ## 功能特性
 
-- 每个 Objective 只保留一个文件，KR 当前状态与进度历史均内嵌存储
-- Dashboard 统一查看各周期目标、关键结果、进度和超期状态
-- 支持周、月、季度、年四种周期
-- 支持周期关闭、重新开启、逻辑归档与只读保护
-- 支持选择性结转未完成 Objective/KR
-- 支持保存在 Markdown 中的周期模板
-- 自动计算 KR 与 Objective 进度
-- 内置进度记录流程，支持同一天多次更新
-- Dashboard 中支持拖拽排序关键结果
-- 支持超期提醒与截止日期延期
-- 默认英文，支持简体中文界面
-- 纯 Markdown 本地存储，适合同步和 Git 管理
+| 领域 | 能力 |
+| --- | --- |
+| 规划 | 支持周、月、季度、年周期；每个 Objective 一个 Markdown 文件 |
+| 衡量 | 支持数值、百分比、分数、布尔型 KR；支持正数相对权重 |
+| 进度 | 自动计算 KR 进度，并按权重汇总 Objective 进度 |
+| 健康度 | 根据计划进度、信心度、阻碍、暂停和超期状态判断健康、风险与偏离 |
+| Check-in | 支持多次带日期的进度记录、说明、变化量和当前阻碍 |
+| 回顾 | 可重复的周回顾、每周期一次的中期评审和周期复盘 |
+| 证据 | 创建回顾时保存不可变的进度与健康度快照 |
+| 生命周期 | 关闭、重新开启、归档、只读保护与选择性结转 |
+| 复用 | 以 Markdown 保存周期模板，并保留 KR 权重 |
+| 界面 | Dashboard、Objective 详情表、KR 拖拽排序、超期提醒与截止日期延期 |
+| 语言 | 英文与简体中文界面 |
+| 隐私 | 纯本地 Markdown 存储，无网络依赖、无遥测 |
 
 ## 系统要求
 
 | 项目 | 要求 |
-|------|------|
+| --- | --- |
 | Obsidian | `1.7.2` 及以上 |
-| 平台 | Windows / macOS / Linux / iOS / Android |
+| 平台 | Windows、macOS、Linux、iOS、Android |
 | 插件 ID | `vault-okr-manager` |
-| 桌面独占 | `false` |
+| 仅限桌面端 | 否 |
 
 ## 安装方法
 
-### 通过社区插件市场安装
+### 社区插件市场
 
-如果插件已经进入 Obsidian 官方社区插件目录：
+如果插件已进入 Obsidian 社区插件目录：
 
-1. 打开 Obsidian。
-2. 进入 **Settings → Community plugins**。
-3. 如果安全模式开启，先关闭。
-4. 选择 **Browse**。
-5. 搜索 `Vault OKR Manager`。
-6. 安装插件。
-7. 启用插件。
+1. 打开 **设置 → 第三方插件**。
+2. 选择 **浏览**，搜索 `Vault OKR Manager`。
+3. 安装并启用插件。
 
 ### 手动安装
 
-1. 打开最新 Release 页面：[Releases](https://github.com/jingmengzhiyue/obsidian-okr-manager/releases/latest)
-2. 下载以下发布文件：
-   - `main.js`
-   - `manifest.json`
-   - `styles.css`
-3. 打开你的 Vault 目录。
-4. 进入 `.obsidian/plugins/`。
-5. 创建文件夹 `vault-okr-manager`。
-6. 将上述三个文件复制进去。
-7. 重启 Obsidian，或重新加载社区插件。
-8. 在 **Settings → Community plugins** 中启用 **Vault OKR Manager**。
+1. 从[最新 Release](https://github.com/jingmengzhiyue/obsidian-okr-manager/releases/latest)下载 `main.js`、`manifest.json` 和 `styles.css`。
+2. 在 Vault 中创建 `.obsidian/plugins/vault-okr-manager/`。
+3. 将三个文件复制到该目录。
+4. 重新加载 Obsidian，并在第三方插件设置中启用 **Vault OKR Manager**。
 
 ```text
 你的 Vault/
@@ -99,324 +79,196 @@ Vault OKR Manager 是一个 Obsidian 社区插件，用于在你的 Vault 中管
 
 ## 快速开始
 
-### 1. 检查默认设置
+### 1. 配置插件
 
-打开 **Settings → Vault OKR Manager**，确认这些默认值：
+打开 **设置 → Vault OKR Manager**。
 
-| 设置项 | 默认值 | 说明 |
-|------|------|------|
-| `Objective directory` | `OKR` | 所有目标文件的根目录 |
-| `Default period type` | `quarter` | 新建目标时默认使用的周期类型 |
-| `Auto-calculate progress` | `true` | 当前值或目标值变化时自动重算进度 |
-| `Open dashboard on startup` | `false` | 启动 Obsidian 时自动打开 Dashboard |
+| 设置项 | 默认值 | 用途 |
+| --- | --- | --- |
+| Objective directory | `OKR` | 周期、目标、模板和回顾的根目录 |
+| Default period type | `quarter` | 新建 Objective 表单的默认周期类型 |
+| Auto-calculate progress | 开启 | 根据当前值和目标值自动计算 KR 进度 |
+| Open dashboard on startup | 关闭 | 工作区就绪后自动打开 Dashboard |
 
-### 2. 创建第一个 Objective
+### 2. 创建 Objective 和加权 KR
 
-1. 用 `Ctrl+P` 或 `Cmd+P` 打开命令面板。
-2. 执行 **New objective**。
-3. 选择周期类型：
-   - Week
-   - Month
-   - Quarter
-   - Year
-4. 输入周期值，例如：
-   - 周：`2026-W20`
-   - 月：`2026-05`
-   - 季度：`2026-Q2`
-   - 年：`2026`
-5. 输入标题、负责人、描述和截止日期。
-6. 点击 **Create**。
+1. 在命令面板执行 **Vault OKR Manager: 新建目标**。
+2. 选择周期，填写标题、负责人、起止日期和可选描述。
+3. 执行 **新建关键结果**，或从 Objective 卡片直接添加 KR。
+4. 设置大于 0 的相对权重；默认值为 `1`。
 
-插件会创建类似 `OKR/2026-Q2/O1.md` 的文件。
+权重是相对值，不要求合计为 100。例如 `2、1、1` 会被标准化为 50%、25%、25%。
 
-### 3. 添加 Key Result
+### 3. 记录进度
 
-1. 执行 **New key result**。
-2. 选择周期和所属 Objective。
-3. 输入 KR 标题、负责人、单位、当前值、目标值、信心等级，以及需要时的截止日期。
-4. 点击 **Create**。
+执行 **记录进度**，或使用 KR 操作按钮。每次 Check-in 会保存日期、进度、适用时的当前值、说明、阻碍、变化量与记录时间。最近一次 Check-in 填写的阻碍会成为 KR 当前阻碍信号；后续记录留空即可清除。
 
-此时不会生成单独的 KR 文件，而是直接写入对应的 Objective 文件。
+### 4. 查看进度与健康度
 
-### 4. 记录进度
+点击侧边栏图标，或执行 **打开仪表盘**。Objective 卡片和 KR 行会同时展示完成进度、原始权重、标准化占比、信心度和健康度。将鼠标悬停在健康度徽标上，可以查看当前风险原因。
 
-1. 执行 **Record progress**。
-2. 选择一个 KR。
-3. 输入最新当前值，或直接调整进度百分比。
-4. 可选填写进展说明和阻碍因素。
-5. 保存更新。
+### 5. 开展回顾并关闭周期
 
-进度历史会追加到 Objective 文件正文的 `## 进度记录` 区域，因此同一天也可以多次记录，不会额外生成文件。
+执行 **周期回顾**，或从周期菜单选择同名入口。在执行过程中持续记录周回顾，在周期中点正式评审优先级和调整项，并在关闭周期前完成复盘。系统允许例外跳过复盘，但必须经过明确的二次确认。
 
-启用自动计算时，最后编辑“当前值”会按 `current / target` 计算进度；最后编辑“进度百分比”则会保留输入的百分比，并反推出精确当前值，不会先把当前值取整。关闭自动计算后，当前值和进度百分比会分别保存。
+## 进度与健康度模型
 
-Boolean 类型的关键结果使用离散值：当前值只能是 `0` 或 `1`，目标值必须是 `1`，Check-in 进度只能是 `0%` 或 `100%`。
+进度与健康度回答的是两个不同问题：
 
-### 5. 打开 Dashboard
+- **进度**：可衡量结果已经完成多少？
+- **健康度**：结合时间、信心、阻碍和状态，执行是否仍然在轨？
 
-1. 执行 **Open dashboard**。
-2. 在侧边栏查看目标、关键结果、进度、截止日期与超期状态。
-3. 需要时可直接拖拽 KR 调整顺序。
+### Objective 加权进度
 
-## 使用说明
+已取消的 KR 不参与计算，其余 KR 使用以下公式：
 
-### 当前存储结构
+```text
+Objective 进度 = Σ(KR 进度 × KR 权重) / Σ(KR 权重)
+```
 
-默认情况下，目录结构类似这样：
+结果会四舍五入并限制在 0–100。旧文件如果没有 `weight`，会按权重 `1` 处理，因此在用户主动调整权重前，行为与旧版等权平均一致。
+
+### KR 健康度
+
+预期进度按照 `created` 到 `due` 的时间线性增长，并限制在 0–100。进行中的 KR 从 100 分开始，根据以下信号扣分或封顶：
+
+| 信号 | 影响 |
+| --- | ---: |
+| 落后计划 | 当预期进度高于实际进度时，扣除两者差值 |
+| 中等信心 | −5 |
+| 低信心 | −15 |
+| 最近一次 Check-in 存在阻碍 | −20 |
+| 暂停中 | −25，且最高 79 分 |
+| 已超期且未完成 | 最高 59 分 |
+
+已完成 KR 为 100 分；已取消 KR 标记为“不适用”。健康状态区间为：
+
+| 分数 | 状态 |
+| ---: | --- |
+| 80–100 | 健康 |
+| 60–79 | 有风险 |
+| 0–59 | 已偏离 |
+
+Objective 健康度使用同一组 KR 权重汇总符合条件的 KR 健康分，之后再应用 Objective 自身的暂停与超期封顶。健康度是透明的运营信号，不是预测模型，也不能替代团队评审。
+
+## 结构化回顾流程
+
+### 周回顾
+
+同一周期内可按日期重复创建，包含摘要、本周进展、阻碍因素和下一步；摘要与下一步必填。
+
+### 中期评审
+
+每个周期最多一个，包含摘要、阶段成果、风险、调整方案和评审决策；摘要与评审决策必填。
+
+### 周期复盘
+
+每个周期最多一个，包含摘要、最终结果、有效做法、未奏效之处、经验教训和后续行动；摘要、经验教训与后续行动必填。
+
+创建回顾时，插件会保存一个不可变快照，记录每个 Objective 与 KR 的状态、进度、权重、标准化占比、健康分、预期进度和风险原因。后续编辑只修改结构化文字，不会改写 Objective、KR、Check-in 或原始快照。
+
+关闭或归档的周期为只读状态：可以打开已有回顾，但不能新建、编辑或删除。重新开启已关闭周期后，写入能力恢复。
+
+## 周期生命周期
+
+```text
+进行中 → 已关闭 → 已归档
+   ↑        ↓          ↓
+   └── 重新开启    取消归档 → 已关闭
+```
+
+- **进行中**周期允许修改 Objective、KR、Check-in、回顾、模板和结转相关内容。
+- **已关闭**周期只读，可以重新开启或归档。
+- **已归档**周期在开启“显示已归档”后仍可查看，并可取消归档回到已关闭状态。
+- 关闭周期时，可以选择性地将未完成 Objective 和 KR 结转到下一个兼容周期。
+- 结转会保留 KR 权重与当前进度，清空 Check-in 历史和当前阻碍，并记录来源 Objective。
+
+## Markdown 存储模型
+
+使用默认根目录时，Vault 结构如下：
 
 ```text
 OKR/
-└── 2026-Q2/
-    ├── O1.md
-    └── O2.md
+├── 2026-Q3/
+│   ├── _period.md
+│   ├── O1.md
+│   └── Reviews/
+│       ├── weekly-2026-08-07.md
+│       ├── weekly-2026-08-14.md
+│       ├── mid-cycle.md
+│       └── retrospective.md
+└── Templates/
+    └── Product-quarter.md
 ```
 
-当前版本不再创建：
+每个 Objective 文件在 YAML frontmatter 中保存 Objective 元数据和 KR 数组。KR 条目包含 `weight` 与 `has-blocker`；可读的 Check-in 历史仍保存在同一个文件的受管理 Markdown 区域。
 
-- 每个 KR 一个独立文件
-- 每次 Check-in 一个独立文件
-- 专门的 `Check-ins` 目录设置项
+回顾文件包含：
 
-现在所有相关数据都聚合在 Objective 文件中：frontmatter 保存当前状态，正文保存可读的进度日志。
+- frontmatter 中的回顾类型、周期和时间戳；
+- frontmatter 中序列化的不可变快照；
+- 受管理 Markdown 区域中的可读快照表；
+- 位于稳定标记之间的结构化文字；
+- 位于受管理区域外的自定义 Markdown，插件更新回顾时会予以保留。
 
-### 命令列表
+除非准备手动修复文件，否则不要删除受管理标记。标记之外的普通文字始终由用户控制。
 
-命令名称会跟随插件当前语言显示。英文环境下的命令如下：
+## 命令
 
 | 命令 | 用途 |
-|------|------|
-| `New objective` | 创建新目标 |
-| `New key result` | 给目标添加 KR |
-| `Record progress` | 记录 KR 进度更新 |
-| `Open dashboard` | 打开或聚焦 OKR Dashboard |
-| `Migrate legacy progress records` | 将旧 frontmatter 进度记录批量迁移到正文 |
+| --- | --- |
+| 新建目标 | 在指定周期创建 Objective |
+| 新建关键结果 | 为 Objective 添加带权重的 KR |
+| 记录进度 | 追加 Check-in，并更新当前进度与阻碍状态 |
+| 打开仪表盘 | 打开或定位到 OKR Dashboard |
+| 周期回顾 | 浏览、新建、编辑、打开或删除周期回顾 |
+| 迁移旧版进度记录 | 将进行中周期的旧 frontmatter Check-in 迁移到可读 Markdown 区域 |
 
-如果 Obsidian 当前使用简体中文，插件界面和命令名称会自动切换为中文。
+生命周期、模板、回顾、编辑、删除、排序和延期等其他操作，可从 Dashboard 和 Objective 详情页使用。
 
-### 周期格式
+## 兼容性与升级
 
-| 类型 | 格式 | 示例 |
-|------|------|------|
-| 周 | `YYYY-Www` | `2026-W20` |
-| 月 | `YYYY-MM` | `2026-05` |
-| 季度 | `YYYY-Qn` | `2026-Q2` |
-| 年 | `YYYY` | `2026` |
-
-### 周期关闭、结转、归档与模板
-
-每个周期默认处于 `open`（进行中）状态。Dashboard 的周期菜单可以关闭周期、重新开启周期、在关闭后归档，以及取消归档。关闭或归档的周期仍可查看，但 Manager 会统一拒绝 Objective/KR 的新增、编辑、打卡、排序、延期和删除操作。已归档周期默认隐藏，可通过“显示已归档”查看。
-
-关闭周期时会打开结转向导：默认目标是下一个同类型周期，并默认选择全部未完成 Objective 和 KR；你可以修改目标周期，或逐项取消。结转后的 KR 保留当前值和进度，但状态和日期按新周期重置，检查历史从空白开始。只有全部目标文件创建成功后，源周期才会标记为关闭；中途失败时，本次新建文件会移入回收站。
-
-“保存为模板”会保存所选 Objective/KR 的结构；“周期模板”可以应用或删除模板。模板保留标题、描述、负责人、KR 单位、目标值、信心度和顺序，只能应用到同类型、进行中且没有 Objective 的周期；应用后的当前值和进度从零开始。
-
-生命周期元数据与模板仍使用普通 Markdown 文件：
-
-```text
-OKR/
-├── 2026-Q2/
-│   ├── _period.md
-│   └── O1.md
-└── Templates/
-    └── 季度规划.md
-```
-
-`_period.md` 使用 `okr-type: period`，模板使用 `okr-type: period-template`。没有 `_period.md` 的旧周期目录会继续被视为 `open`，不会批量迁移。归档只修改元数据，不移动目录，因此现有链接和路径不会变化；插件更新状态时也会保留 `_period.md` 中用户自行添加的字段。
-
-降级到 1.3.0 之前的版本后，文件仍可读取，但旧插件会忽略生命周期元数据，无法执行只读保护；它在改写结转目标时还可能丢弃 `rollover-from`。降级前请先备份或提交 Vault。
-
-### Objective 文件模型
-
-每个 Objective 文件包含：
-
-- Objective 元数据
-- `key-results` 数组，用于保存 KR 当前状态
-- 正文 `## 进度记录` 区域，用于保存每次 check-in 历史
-- 插件渲染 KR 内容的保留区域
-
-示例：
-
-```markdown
----
-okr-type: objective
-okr-id: O1
-okr-period: 2026-Q2
-okr-period-type: quarter
-title: 提升工程质量
-owner: 团队负责人
-status: active
-progress: 68
-due: 2026-06-30
-key-results:
-  - okr-id: O1-KR1
-    title: 代码评审覆盖率达到 100%
-    current: 80
-    target: 100
-    progress: 80
-    order: 0
----
-
-## 背景
-
-提升工程质量。
-
-## Key Results
-
-<!-- OKR-KR-LIST -->
-插件会在这里渲染 KR 列表。
-<!-- /OKR-KR-LIST -->
-
-## 进度记录
-
-<!-- OKR-CHECKINS-START -->
-### O1-KR1 进度记录
-
-- **2026-05-18** 80% (+10) `O1-KR1-1740000000000`
-  - recordedAt: 2026-05-18T09:00:00.000Z
-  - note: 已提升后端模块代码评审覆盖率
-  - blocker:
-<!-- OKR-CHECKINS-END -->
-```
-
-### 进度规则
-
-KR 进度：
-
-- `boolean`：完成则 `100%`，否则 `0%`
-- 其他数值单位：`current / target * 100`
-- `target <= 0` 时返回 `0%`
-- 最终进度限制在 `0–100`
-
-Objective 进度：
-
-- 取所有未取消 KR 的平均值
-- 没有有效 KR 时为 `0%`
-
-### KR 排序
-
-- Dashboard 支持拖拽排序关键结果。
-- 新顺序会持久化写回 Objective 文件。
-- 详情视图仍保留移动操作作为兜底交互。
-
-### 超期目标
-
-当 Objective 超过截止日期且状态不是完成或取消时，插件会：
-
-- 标记为超期
-- 在 Dashboard 中显示提醒
-- 用视觉样式突出风险状态
-- 提供延期入口以更新截止日期
-
-### 语言行为
-
-- 默认语言：英文
-- 支持语言：简体中文（`zh-CN`）
-- 未识别或未支持的语言会回退到英文
-- 切换界面语言不会自动改写已存在的 Markdown 笔记内容
-
-### 旧数据模型说明
-
-当前版本不兼容以下旧原型模型：
-
-- 每个 KR 一个独立 Markdown 文件
-- 每次进度记录一个独立 Check-in 文件
-- 在设置页中配置独立的 Check-in 目录
-
-如果你过去使用过旧原型，需要手动将独立文件整理到当前的 Objective 聚合结构中。
-
-如果你已经有旧版 Objective 文件，并且进度历史还保存在 frontmatter 的 `checkIns` 数组里，1.3.0 会继续读取这些旧数据。你可以执行 **Migrate legacy progress records** 一次性迁移当前 OKR 目录中进行中周期的旧记录；关闭和归档周期会被跳过并报告数量。你也可以等下次通过插件记录进度、编辑 KR、调整排序或更新目标时，让插件自动把对应文件的旧 `checkIns` 转换为正文 `## 进度记录` 区域，并从 frontmatter 中移除历史数组。
+- 1.4.0 可直接读取 1.3.x Objective 文件，无需迁移。缺少权重时默认按 `1` 处理；缺少当前阻碍字段时，会从最近一次 Check-in 推导。
+- 结构版本为 1 的旧周期模板仍可读取，其中 KR 的默认权重为 `1`。
+- 旧版 Check-in 迁移命令继续保留，并会跳过已关闭和已归档周期。
+- 降级到 1.4.0 之前的版本前，请先备份或提交 Vault。旧插件会忽略回顾文件，并可能在改写 Objective 时丢弃 `weight` 或 `has-blocker`。
 
 ## 常见问题
 
-### 现在还会给每个 KR 单独建文件吗？
+### KR 权重必须合计为 100 吗？
 
-不会。KR 已经内嵌在 Objective 文件中。
+不需要。权重只需为正数，插件会自动标准化为占比后参与展示与计算。
 
-### 现在还会创建 `Check-ins` 文件夹吗？
+### 为什么进度很高，健康度仍可能较低？
 
-不会。进度历史保存在 Objective 文件正文的 `## 进度记录` 区域中。
+进度只描述完成比例；健康度还会考虑按时间应达到的预期进度、信心度、最近阻碍、暂停和超期状态。
 
-### 同一天可以记录多次进度吗？
+### 可以直接编辑回顾 Markdown 吗？
 
-可以。当前版本支持同一天多次记录。
+可以。请保留受管理标记。结构化标记内的内容可以重新读入编辑器，受管理区域之外的自定义文字也会保留。
 
-### Objective 超期后会怎样？
+### 回顾会修改我的 OKR 吗？
 
-Dashboard 会显示超期提醒和状态标识，你也可以直接从界面里延期截止日期。
+不会。创建回顾只保存证据快照，编辑回顾也只会更新文字内容。
 
-### 会上传数据到云端吗？
+### 可以不写复盘就关闭周期吗？
 
-不会。所有数据都保存在本地 Vault 中。
-
-### 可以不用季度，改用周或月吗？
-
-可以。插件支持周、月、季度、年四种周期。
-
-### 支持手机端吗？
-
-支持，插件不是桌面独占。
-
-## 待办路线图
-
-以下待办清单基于当前实现的静态审查结果，优先级按照稳定性、性能和 OKR 管理完整性排序。
-
-### P0：稳定性与流畅度
-
-- [x] 在行内操作后立即刷新当前 Markdown 预览，包括记录进度、编辑、删除、新增 KR、延期等操作
-- [x] 减少由弹窗回调和元数据事件同时触发的重复 Dashboard 刷新
-- [x] 将 Objective 文件发现逻辑从全 Vault 扫描改为仅在已配置 OKR 根目录下查找
-- [x] 为 Dashboard、详情视图和进度选择器增加 frontmatter 摘要缓存，避免读取全部进度历史正文
-- [ ] 为未提供周期的 API 建立 KR 到 Objective 的快速索引，避免跨周期扫描
-
-### P1：OKR 核心流程完善
-
-- [x] 增加周期规划能力，例如模板、未完成事项结转、周期归档与关闭
-- [ ] 增加结构化评审流程，例如周回顾、中期评审、周期复盘
-- [ ] 为 Dashboard 增加 owner、状态、周期、超期状态等筛选与搜索能力
-- [ ] 丰富 Check-in 内容，支持下一步计划、风险等级、里程碑说明和证据链接
-
-### P2：管理深度与报表能力
-
-- [ ] 支持 KR 权重或比简单平均更合理的健康度评分
-- [ ] 增加周期趋势视图和汇总报表
-- [ ] 支持导出 Markdown 或 CSV 摘要
-- [ ] 提升多人协作能力，不再只依赖单个自由文本 owner 字段
+可以，但必须经过专门警告和明确确认。这样既保留例外处理能力，也避免在没有提示的情况下跳过复盘。
 
 ## 开发
 
-需要 Node.js `20` 或更高版本。
-
 ```bash
-git clone https://github.com/jingmengzhiyue/obsidian-okr-manager.git
-cd obsidian-okr-manager
 npm install
 npm run dev
-```
-
-常用命令：
-
-```bash
-npm run build
-npm run lint
 npm test
+npm run lint
+npm run build
 ```
 
-发布前请确认：
+生产发布包由 `main.js`、`manifest.json` 和 `styles.css` 组成。开发环境要求 Node.js 20 或更高版本。
 
-1. 更新 `manifest.json`
-2. 更新 `package.json`
-3. 更新 `versions.json`
-4. 运行 `npm run build`
-5. 在 GitHub Release 中单独上传 `main.js`、`manifest.json`、`styles.css`
+## 隐私与许可证
 
-## 隐私与数据
+Vault OKR Manager 不会向外部服务发送 Vault 内容，也不包含遥测。Obsidian Sync、备份工具或 Git 可能复制文件，请单独检查这些工具的配置。
 
-Vault OKR Manager 完全在本地运行：
-
-- 不执行远程代码
-- 不包含隐藏遥测
-- 不依赖外部 API
-
-## 许可证
-
-本项目使用 [MIT License](./LICENSE)。
+项目基于 [MIT License](./LICENSE) 发布。

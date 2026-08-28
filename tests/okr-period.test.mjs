@@ -40,6 +40,7 @@ function objective(overrides = {}) {
 				description: "",
 				owner: "Team",
 				unit: "number",
+				weight: 2,
 				current: 4,
 				target: 10,
 				progress: 40,
@@ -60,6 +61,7 @@ function objective(overrides = {}) {
 						recordedAt: "2026-05-01T00:00:00.000Z",
 					},
 				],
+				hasBlocker: true,
 			},
 		],
 	};
@@ -272,6 +274,7 @@ test("closing a period carries selected data, clears history, and writes metadat
 		period: "2026-Q2",
 		targetPeriod: "2026-Q3",
 		selections: [{ objectiveId: "O1", keyResultIds: ["O1-KR1"] }],
+		allowMissingRetrospective: true,
 	});
 
 	assert.equal(result.createdObjectives[0].id, "O3");
@@ -279,6 +282,8 @@ test("closing a period carries selected data, clears history, and writes metadat
 	assert.equal(result.createdObjectives[0].keyResults[0].current, 4);
 	assert.equal(result.createdObjectives[0].keyResults[0].progress, 40);
 	assert.equal(result.createdObjectives[0].keyResults[0].status, "active");
+	assert.equal(result.createdObjectives[0].keyResults[0].weight, 2);
+	assert.equal(result.createdObjectives[0].keyResults[0].hasBlocker, false);
 	assert.deepEqual(result.createdObjectives[0].keyResults[0].checkIns, []);
 	assert.equal(events.at(-1)[0], "metadata");
 	assert.equal(events.at(-1)[1].status, "closed");
@@ -291,7 +296,11 @@ test("closing without rollover requires explicit authorization", async () => {
 		{ objective: objective(), keyResults: objective().keyResults },
 	];
 	await assert.rejects(
-		manager.closePeriod({ period: "2026-Q2", selections: [] }),
+		manager.closePeriod({
+			period: "2026-Q2",
+			selections: [],
+			allowMissingRetrospective: true,
+		}),
 		/Explicit confirmation/,
 	);
 });
@@ -331,6 +340,7 @@ test("a failed rollover removes files created by the same operation and leaves s
 		manager.closePeriod({
 			period: "2026-Q2",
 			targetPeriod: "2026-Q3",
+			allowMissingRetrospective: true,
 			selections: [
 				{ objectiveId: "O1", keyResultIds: ["O1-KR1"] },
 				{ objectiveId: "O2", keyResultIds: ["O1-KR1"] },
@@ -417,6 +427,7 @@ test("period lock serializes ordinary writes before close", async () => {
 	const close = manager.closePeriod({
 		period: "2026-Q2",
 		selections: [],
+		allowMissingRetrospective: true,
 	});
 	await new Promise((resolve) => setTimeout(resolve, 0));
 	assert.deepEqual(events, ["write-start"]);
@@ -448,6 +459,7 @@ test("template application resets structural state for every KR unit", async () 
 						owner: "Team",
 						unit,
 						target: unit === "boolean" ? 1 : 10,
+						weight: order + 1,
 						confidence: "medium",
 						order,
 					}),
@@ -463,6 +475,7 @@ test("template application resets structural state for every KR unit", async () 
 	});
 	assert.deepEqual(created.keyResults.map((item) => item.current), [0, 0, 0, 0]);
 	assert.deepEqual(created.keyResults.map((item) => item.progress), [0, 0, 0, 0]);
+	assert.deepEqual(created.keyResults.map((item) => item.weight), [1, 2, 3, 4]);
 	assert.ok(created.keyResults.every((item) => item.status === "active"));
 });
 

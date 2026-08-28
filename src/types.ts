@@ -4,6 +4,40 @@ export type OKRPeriodType = "week" | "month" | "quarter" | "year";
 export type OKRPeriod = string; // e.g. "2026-W20" | "2026-05" | "2026-Q2" | "2026"
 export type OKRPeriodStatus = "open" | "closed" | "archived";
 export type KRUnit = "score" | "percentage" | "number" | "boolean";
+export type HealthStatus =
+	| "on-track"
+	| "at-risk"
+	| "off-track"
+	| "not-applicable";
+export type HealthReason =
+	| "behind-schedule"
+	| "medium-confidence"
+	| "low-confidence"
+	| "blocked"
+	| "on-hold"
+	| "overdue";
+export type PeriodReviewType = "weekly" | "mid-cycle" | "retrospective";
+export type ReviewSectionKey =
+	| "summary"
+	| "wins"
+	| "blockers"
+	| "next-steps"
+	| "achievements"
+	| "risks"
+	| "adjustments"
+	| "decisions"
+	| "outcomes"
+	| "worked"
+	| "did-not-work"
+	| "lessons"
+	| "follow-ups";
+
+export interface HealthAssessment {
+	score: number | null;
+	status: HealthStatus;
+	expectedProgress: number | null;
+	reasons: HealthReason[];
+}
 
 export interface ObjectiveOrigin {
 	period: OKRPeriod;
@@ -36,6 +70,7 @@ export interface KeyResult {
 	description: string;
 	owner: string;
 	unit: KRUnit;
+	weight: number;
 	current: number;
 	target: number;
 	progress: number; // 0–100
@@ -45,6 +80,7 @@ export interface KeyResult {
 	due: string;
 	filePath: string;
 	checkIns: CheckIn[];
+	hasBlocker: boolean;
 }
 
 export interface CheckIn {
@@ -90,6 +126,7 @@ export interface ClosePeriodInput {
 	targetPeriod?: OKRPeriod;
 	selections: RolloverSelection[];
 	allowUnfinishedWithoutRollover?: boolean;
+	allowMissingRetrospective?: boolean;
 }
 
 export interface ClosePeriodResult {
@@ -104,6 +141,7 @@ export interface PeriodTemplateKeyResult {
 	description: string;
 	owner: string;
 	unit: KRUnit;
+	weight: number;
 	target: number;
 	confidence: Confidence;
 	order: number;
@@ -138,6 +176,62 @@ export interface SavePeriodTemplateInput {
 export interface ApplyPeriodTemplateInput {
 	templateId: string;
 	targetPeriod: OKRPeriod;
+}
+
+export interface ReviewSnapshotKeyResult {
+	id: string;
+	title: string;
+	status: OKRStatus;
+	weight: number;
+	normalizedWeight: number;
+	progress: number;
+	health: HealthAssessment;
+}
+
+export interface ReviewSnapshotObjective {
+	id: string;
+	title: string;
+	status: OKRStatus;
+	progress: number;
+	health: HealthAssessment;
+	keyResults: ReviewSnapshotKeyResult[];
+}
+
+export interface ReviewSnapshot {
+	capturedAt: string;
+	objectives: ReviewSnapshotObjective[];
+}
+
+export type ReviewSections = Record<ReviewSectionKey, string>;
+
+export interface PeriodReview {
+	id: string;
+	period: OKRPeriod;
+	periodType: OKRPeriodType;
+	type: PeriodReviewType;
+	reviewDate: string;
+	createdAt: string;
+	updatedAt: string;
+	filePath: string;
+	sections: ReviewSections;
+	snapshot: ReviewSnapshot;
+}
+
+export type PeriodReviewSummary = Omit<PeriodReview, "sections" | "snapshot"> & {
+	objectiveCount: number;
+};
+
+export interface CreatePeriodReviewInput {
+	period: OKRPeriod;
+	type: PeriodReviewType;
+	reviewDate: string;
+	sections: ReviewSections;
+}
+
+export interface UpdatePeriodReviewInput {
+	period: OKRPeriod;
+	reviewId: string;
+	sections: ReviewSections;
 }
 
 export interface OKRPluginSettings {

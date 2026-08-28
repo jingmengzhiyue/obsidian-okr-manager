@@ -17,6 +17,7 @@ import {
 	FRONTMATTER_TEMPLATE_ID,
 	FRONTMATTER_TEMPLATE_NAME,
 	FRONTMATTER_TEMPLATE_VERSION,
+	FRONTMATTER_WEIGHT,
 	OKR_TYPE_PERIOD,
 	OKR_TYPE_PERIOD_TEMPLATE,
 	KEY_RESULT_ID_PATTERN,
@@ -39,6 +40,7 @@ import type {
 } from "../types";
 import { sanitizeTemplateFileName } from "../utils/period";
 import { normalizeVaultPath } from "../utils/path";
+import { isValidKeyResultWeight } from "../utils/validation";
 import { FileParser } from "./FileParser";
 
 const PERIOD_STATUSES = new Set<OKRPeriodStatus>([
@@ -402,7 +404,8 @@ export class PeriodRepository {
 		frontmatter: Record<string, unknown>,
 		path: string,
 	): PeriodTemplate {
-		if (frontmatter[FRONTMATTER_TEMPLATE_VERSION] !== PERIOD_TEMPLATE_VERSION) {
+		const templateVersion = frontmatter[FRONTMATTER_TEMPLATE_VERSION];
+		if (templateVersion !== 1 && templateVersion !== PERIOD_TEMPLATE_VERSION) {
 			throw new Error(`Unsupported period template version in ${path}`);
 		}
 		const objectivesValue = frontmatter[FRONTMATTER_OBJECTIVES];
@@ -467,6 +470,7 @@ export class PeriodRepository {
 				const unit = keyResult.unit;
 				const confidence = keyResult.confidence;
 				const target = keyResult.target;
+				const weight = keyResult[FRONTMATTER_WEIGHT] ?? 1;
 				if (typeof unit !== "string" || !KR_UNITS.has(unit as KRUnit)) {
 					throw new Error(`Invalid template key result unit in ${path}`);
 				}
@@ -482,6 +486,9 @@ export class PeriodRepository {
 				if (unit === "boolean" && target !== 1) {
 					throw new Error(`Invalid Boolean template target in ${path}`);
 				}
+				if (typeof weight !== "number" || !isValidKeyResultWeight(weight)) {
+					throw new Error(`Invalid template key result weight in ${path}`);
+				}
 				if (
 					typeof keyResult.order !== "number" ||
 					!Number.isInteger(keyResult.order) ||
@@ -494,6 +501,7 @@ export class PeriodRepository {
 					description: this.optionalString(keyResult.description),
 					owner: this.optionalString(keyResult.owner),
 					unit: unit as KRUnit,
+					weight,
 					target,
 					confidence: confidence as Confidence,
 					order: keyResult.order,
@@ -519,6 +527,7 @@ export class PeriodRepository {
 					description: keyResult.description,
 					owner: keyResult.owner,
 					unit: keyResult.unit,
+					[FRONTMATTER_WEIGHT]: keyResult.weight,
 					target: keyResult.target,
 					confidence: keyResult.confidence,
 					order: keyResult.order,

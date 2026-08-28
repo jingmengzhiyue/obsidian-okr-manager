@@ -12,6 +12,7 @@ import {
 	CheckIn,
 	ClosePeriodInput,
 	ClosePeriodResult,
+	CreatePeriodReviewInput,
 	KeyResult,
 	Objective,
 	OKRPeriodInfo,
@@ -20,9 +21,13 @@ import {
 	OKRStatus,
 	PeriodTemplate,
 	PeriodTemplateSummary,
+	PeriodReview,
+	PeriodReviewSummary,
+	ReviewSnapshot,
 	RolloverCandidate,
 	RolloverMapping,
 	SavePeriodTemplateInput,
+	UpdatePeriodReviewInput,
 } from "../types";
 import {
 	FRONTMATTER_OKR_TYPE,
@@ -43,11 +48,22 @@ import { collectMarkdownFilesFromTree } from "../utils/fileTree";
 import {
 	isValidCheckInFields,
 	isValidKeyResultValues,
+	isValidKeyResultWeight,
 } from "../utils/validation";
-import { formatLocalDate } from "../utils/date";
+import { formatLocalDate, getTodayLocalDate, parseLocalDate } from "../utils/date";
 import { getIncompleteObjectives, getNextPeriod } from "../utils/period";
 import { normalizeVaultPath } from "../utils/path";
 import { PeriodRepository } from "./PeriodRepository";
+import { ReviewRepository } from "./ReviewRepository";
+import {
+	calculateKeyResultHealth,
+	calculateObjectiveHealth,
+	getNormalizedKeyResultWeight,
+} from "../utils/health";
+import {
+	hasRequiredReviewContent,
+	isValidPeriodReviewType,
+} from "../utils/review";
 
 interface PeriodCacheEntry {
 	objectives: Objective[];
@@ -65,6 +81,7 @@ interface ObjectiveLookupResult {
 export class OKRManager {
 	private parser: FileParser;
 	private periodRepository: PeriodRepository;
+	private reviewRepository: ReviewRepository;
 	private readonly cache = new Map<string, PeriodCacheEntry>();
 	private readonly summaryCache = new Map<string, PeriodCacheEntry>();
 	private readonly mutationQueues = new Map<string, Promise<void>>();
@@ -79,6 +96,7 @@ export class OKRManager {
 	) {
 		this.parser = new FileParser(app);
 		this.periodRepository = new PeriodRepository(app, settings, this.parser);
+		this.reviewRepository = new ReviewRepository(app, settings, this.parser);
 	}
 
 	getApp(): App {
@@ -104,29 +122,32 @@ export class OKRManager {
 	updateSettings(settings: OKRPluginSettings): void {
 		this.settings = settings;
 		this.periodRepository.updateSettings(settings);
+		this.reviewRepository.updateSettings(settings);
 		this.clearAllCache();
 	}
 
 	invalidateCacheForFile(file: TAbstractFile): boolean {
 		const path = file.path;
 		const periodInvalidated = this.periodRepository.invalidatePath(path);
+		const reviewInvalidated = this.reviewRepository.invalidatePath(path);
 		const period = this.extractPeriodFromPath(path);
 		if (period) {
 			this.invalidatePeriodCaches(period);
 			return true;
 		}
-		return periodInvalidated;
+		return periodInvalidated || reviewInvalidated;
 	}
 
 	invalidateCacheByPath(oldPath: string): boolean {
 		const normalized = normalizeVaultPath(oldPath);
 		const periodInvalidated = this.periodRepository.invalidatePath(normalized);
+		const reviewInvalidated = this.reviewRepository.invalidatePath(normalized);
 		const period = this.extractPeriodFromPath(normalized);
 		if (period) {
 			this.invalidatePeriodCaches(period);
 			return true;
 		}
-		return periodInvalidated;
+		return periodInvalidated || reviewInvalidated;
 	}
 
 	clearAllCache(): void {
@@ -134,6 +155,7 @@ export class OKRManager {
 		this.cache.clear();
 		this.summaryCache.clear();
 		this.periodRepository.clearCache();
+		this.reviewRepository.clearCache();
 	}
 
 	async getPeriodInfos(
@@ -375,11 +397,20 @@ export class OKRManager {
 	async createKeyResult(
 		params: Omit<
 			KeyResult,
-			"id" | "progress" | "filePath" | "periodType" | "order" | "checkIns"
-		>,
+			| "id"
+			| "progress"
+			| "filePath"
+			| "periodType"
+			| "order"
+			| "checkIns"
+			| "hasBlocker"
+			| "weight"
+		> & { weight?: number },
 	): Promise<KeyResult> {
+		const weight = params.weight ?? 1;
 		if (
-			!isValidKeyResultValues(params.unit, params.current, params.target)
+			!isValidKeyResultValues(params.unit, params.current, params.target) ||
+			!isValidKeyResultWeight(weight)
 		) {
 			throw new Error(this.t("errors.invalidKeyResultValues"));
 		}
@@ -427,6 +458,7 @@ export class OKRManager {
 				description: params.description.trim(),
 				owner: params.owner.trim(),
 				unit: params.unit,
+				weight,
 				current: params.current,
 				target: params.target,
 				progress,
@@ -436,6 +468,7 @@ export class OKRManager {
 				due: params.due,
 				filePath: entry.file.path,
 				checkIns: [],
+				hasBlocker: false,
 			};
 			return { ...objective, keyResults: [...existing, created] };
 		});
@@ -484,11 +517,9 @@ export class OKRManager {
 			| "status"
 			| "confidence"
 			| "due"
-		>,
+		> & { weight?: number },
 	): Promise<KeyResult> {
-		if (
-			!isValidKeyResultValues(updates.unit, updates.current, updates.target)
-		) {
+		if (!isValidKeyResultValues(updates.unit, updates.current, updates.target)) {
 			throw new Error(this.t("errors.invalidKeyResultValues"));
 		}
 		const found = await this.findObjectiveEntryByKRId(
@@ -505,6 +536,10 @@ export class OKRManager {
 				if (item.id !== krId) {
 					return item;
 				}
+				const weight = updates.weight ?? item.weight ?? 1;
+				if (!isValidKeyResultWeight(weight)) {
+					throw new Error(this.t("errors.invalidKeyResultValues"));
+				}
 
 				const progress = this.settings.autoComputeProgress
 					? this.parser.calculateKRProgress(
@@ -519,6 +554,7 @@ export class OKRManager {
 					description: updates.description.trim(),
 					owner: updates.owner.trim(),
 					unit: updates.unit,
+					weight,
 					current: updates.current,
 					target: updates.target,
 					progress,
@@ -617,6 +653,7 @@ export class OKRManager {
 								(left, right) =>
 									right.recordedAt.localeCompare(left.recordedAt),
 							),
+							hasBlocker: nextCheckIn.blocker.length > 0,
 						}
 					: item,
 			);
@@ -852,6 +889,12 @@ export class OKRManager {
 			if (latestSourceInfo.status !== "open") {
 				throw new Error(this.t("errors.periodNotOpen", { period: sourcePeriod }));
 			}
+			if (
+				input.allowMissingRetrospective !== true &&
+				!(await this.hasPeriodReview(sourcePeriod, "retrospective"))
+			) {
+				throw new Error(this.t("errors.missingRetrospectiveConfirmationRequired"));
+			}
 			const candidates = await this.getRolloverCandidates(sourcePeriod);
 			if (
 				candidates.length > 0 &&
@@ -941,6 +984,7 @@ export class OKRManager {
 							due,
 							filePath,
 							checkIns: [],
+							hasBlocker: false,
 						}));
 						const objective: Objective = {
 							...candidate.objective,
@@ -1082,6 +1126,7 @@ export class OKRManager {
 						description: keyResult.description,
 						owner: keyResult.owner,
 						unit: keyResult.unit,
+						weight: keyResult.weight,
 						target: keyResult.target,
 						confidence: keyResult.confidence,
 						order: keyResult.order,
@@ -1153,6 +1198,7 @@ export class OKRManager {
 							description: keyResult.description,
 							owner: keyResult.owner,
 							unit: keyResult.unit,
+							weight: keyResult.weight,
 							current: 0,
 							target: keyResult.target,
 							progress: 0,
@@ -1162,6 +1208,7 @@ export class OKRManager {
 							due,
 							filePath,
 							checkIns: [],
+							hasBlocker: false,
 							})),
 					};
 					createdFiles.push(await this.createObjectiveFile(objective));
@@ -1185,6 +1232,133 @@ export class OKRManager {
 
 	async deletePeriodTemplate(templateId: string): Promise<void> {
 		await this.periodRepository.deleteTemplate(templateId);
+	}
+
+	async listPeriodReviews(period: string): Promise<PeriodReviewSummary[]> {
+		const normalizedPeriod = this.normalizePeriod(period);
+		return (await this.reviewRepository.listReviews(normalizedPeriod)).map(
+			(review) => ({
+				id: review.id,
+				period: review.period,
+				periodType: review.periodType,
+				type: review.type,
+				reviewDate: review.reviewDate,
+				createdAt: review.createdAt,
+				updatedAt: review.updatedAt,
+				filePath: review.filePath,
+				objectiveCount: review.snapshot.objectives.length,
+			}),
+		);
+	}
+
+	async getPeriodReview(
+		period: string,
+		reviewId: string,
+	): Promise<PeriodReview | null> {
+		return this.reviewRepository.getReview(
+			this.normalizePeriod(period),
+			reviewId,
+		);
+	}
+
+	async hasPeriodReview(
+		period: string,
+		type: PeriodReview["type"],
+	): Promise<boolean> {
+		return (await this.listPeriodReviews(period)).some(
+			(review) => review.type === type,
+		);
+	}
+
+	async createPeriodReview(
+		input: CreatePeriodReviewInput,
+	): Promise<PeriodReview> {
+		const period = this.normalizePeriod(input.period);
+		if (!isValidPeriodReviewType(input.type)) {
+			throw new Error(this.t("errors.invalidReviewType"));
+		}
+		if (!parseLocalDate(input.reviewDate)) {
+			throw new Error(this.t("errors.invalidReviewDate"));
+		}
+		if (!hasRequiredReviewContent(input.type, input.sections)) {
+			throw new Error(this.t("errors.incompleteReview"));
+		}
+		return this.withPeriodLocks([period], async () => {
+			await this.assertPeriodWritable(period);
+			const info = await this.getPeriodInfo(period);
+			const now = new Date().toISOString();
+			const objectives = await this.getObjectiveSummaries(period);
+			return this.reviewRepository.createReview({
+				id: crypto.randomUUID(),
+				period,
+				periodType: info.periodType,
+				type: input.type,
+				reviewDate: input.reviewDate,
+				createdAt: now,
+				updatedAt: now,
+				sections: input.sections,
+				snapshot: this.buildReviewSnapshot(objectives, now),
+			});
+		});
+	}
+
+	async updatePeriodReview(
+		input: UpdatePeriodReviewInput,
+	): Promise<PeriodReview> {
+		const period = this.normalizePeriod(input.period);
+		return this.withPeriodLocks([period], async () => {
+			await this.assertPeriodWritable(period);
+			const review = await this.reviewRepository.getReview(period, input.reviewId);
+			if (!review) {
+				throw new Error(this.t("errors.reviewNotFound", { id: input.reviewId }));
+			}
+			if (!hasRequiredReviewContent(review.type, input.sections)) {
+				throw new Error(this.t("errors.incompleteReview"));
+			}
+			return this.reviewRepository.updateReview(
+				period,
+				input.reviewId,
+				input.sections,
+				new Date().toISOString(),
+			);
+		});
+	}
+
+	async deletePeriodReview(period: string, reviewId: string): Promise<void> {
+		const normalizedPeriod = this.normalizePeriod(period);
+		await this.withPeriodLocks([normalizedPeriod], async () => {
+			await this.assertPeriodWritable(normalizedPeriod);
+			await this.reviewRepository.deleteReview(normalizedPeriod, reviewId);
+		});
+	}
+
+	private buildReviewSnapshot(
+		objectives: Objective[],
+		capturedAt: string,
+	): ReviewSnapshot {
+		const asOf = getTodayLocalDate();
+		return {
+			capturedAt,
+			objectives: objectives.map((objective) => ({
+				id: objective.id,
+				title: objective.title,
+				status: objective.status,
+				progress: objective.progress,
+				health: calculateObjectiveHealth(objective, asOf),
+				keyResults: objective.keyResults.map((keyResult) => ({
+					id: keyResult.id,
+					title: keyResult.title,
+					status: keyResult.status,
+					weight: keyResult.weight ?? 1,
+					normalizedWeight: getNormalizedKeyResultWeight(
+						keyResult,
+						objective.keyResults,
+					),
+					progress: keyResult.progress,
+					health: calculateKeyResultHealth(keyResult, asOf),
+				})),
+			})),
+		};
 	}
 
 	private async loadObjectivesForPeriod(

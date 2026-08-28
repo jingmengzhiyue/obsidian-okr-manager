@@ -1114,3 +1114,113 @@
 
   .okr-period-selection-child { margin-left: 12px; }
 }
+
+/* ---------- 权重、健康度与结构化回顾 ---------- */
+.okr-health-badge,
+.okr-weight-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 1px 7px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: var(--font-ui-smaller);
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.okr-weight-badge {
+  border-color: var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+}
+
+.okr-health-on-track {
+  border-color: rgba(var(--color-green-rgb), 0.3);
+  background: rgba(var(--color-green-rgb), 0.12);
+  color: var(--color-green);
+}
+
+.okr-health-at-risk {
+  border-color: rgba(var(--color-orange-rgb), 0.35);
+  background: rgba(var(--color-orange-rgb), 0.13);
+  color: var(--color-orange);
+}
+
+.okr-health-off-track {
+  border-color: rgba(var(--color-red-rgb), 0.35);
+  background: rgba(var(--color-red-rgb), 0.12);
+  color: var(--color-red);
+}
+
+.okr-health-not-applicable {
+  border-color: var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-faint);
+}
+
+.okr-review-create-actions,
+.okr-review-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.okr-review-create-actions { margin: 14px 0; }
+
+.okr-review-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.okr-review-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-primary);
+}
+
+.okr-review-row-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.okr-review-row-summary span,
+.okr-review-readonly-note,
+.okr-review-snapshot-note { color: var(--text-muted); }
+
+.okr-review-textarea {
+  min-height: 92px;
+  resize: vertical;
+}
+
+.okr-review-required-warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 10px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(var(--color-orange-rgb), 0.4);
+  border-radius: var(--radius-s);
+  background: rgba(var(--color-orange-rgb), 0.1);
+  color: var(--text-normal);
+}
+
+.okr-inline-kr-table { display: block; overflow-x: auto; }
+
+@media (max-width: 480px) {
+  .okr-review-row,
+  .okr-review-required-warning {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

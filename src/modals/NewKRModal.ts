@@ -4,7 +4,10 @@ import { OKRManager } from "../manager/OKRManager";
 import { Confidence } from "../types";
 import { getTodayLocalDate } from "../utils/date";
 import { getElementDocument, isActiveElement } from "../utils/document";
-import { isValidKeyResultValues } from "../utils/validation";
+import {
+	isValidKeyResultValues,
+	isValidKeyResultWeight,
+} from "../utils/validation";
 
 interface NewKRModalOptions {
 	initialPeriod?: string;
@@ -18,6 +21,7 @@ export class NewKRModal extends Modal {
 	private title: string = "";
 	private owner: string = "";
 	private unit: "score" | "percentage" | "number" | "boolean" = "score";
+	private weight = 1;
 	private current = 0;
 	private target: number = 0;
 	private confidence: Confidence = "medium";
@@ -162,6 +166,34 @@ export class NewKRModal extends Modal {
 		unitSelect.value = this.unit;
 		unitSelect.addEventListener("change", () => {
 			this.unit = unitSelect.value as typeof this.unit;
+			this.validate();
+		});
+
+		const weightField = contentEl.createDiv("okr-field");
+		this.createRequiredLabel(weightField, this.t("modals.fields.weight"));
+		const weightInput = weightField.createEl("input", {
+			cls: "okr-input",
+			type: "number",
+		});
+		weightInput.value = String(this.weight);
+		weightInput.setAttribute("min", "0.1");
+		weightInput.setAttribute("step", "0.1");
+		const weightError = weightField.createDiv({
+			cls: "okr-input-error",
+			text: this.t("modals.input.weightError"),
+		});
+		weightInput.addEventListener("input", () => {
+			const value = Number(weightInput.value);
+			const valid = isValidKeyResultWeight(value);
+			this.weight = valid ? value : 0;
+			weightInput.toggleClass(
+				"okr-invalid",
+				weightInput.value.length > 0 && !valid,
+			);
+			weightError.toggleClass(
+				"visible",
+				weightInput.value.length > 0 && !valid,
+			);
 			this.validate();
 		});
 
@@ -311,9 +343,12 @@ export class NewKRModal extends Modal {
 				this.owner.length > 0 &&
 				this.due.length > 0 &&
 				targetInput.value.length > 0 &&
+				weightInput.value.length > 0 &&
 				numericValuesValid &&
+				isValidKeyResultWeight(this.weight) &&
 				!targetInput.hasClass("okr-invalid") &&
-				!currentInput.hasClass("okr-invalid");
+				!currentInput.hasClass("okr-invalid") &&
+				!weightInput.hasClass("okr-invalid");
 			confirmBtn.disabled = !valid;
 			return valid;
 		};
@@ -348,6 +383,7 @@ export class NewKRModal extends Modal {
 				description: this.description,
 				owner: this.owner,
 				unit: this.unit,
+				weight: this.weight,
 				current: this.current,
 				target: this.target,
 				status: "active",

@@ -1,13 +1,13 @@
 {
 	"name": "vault-okr-manager",
-	"version": "1.3.0",
-	"description": "Manage OKRs inside your vault with a streamlined dashboard and built-in check-ins.",
+	"version": "1.4.0",
+	"description": "Manage weighted OKRs, health signals, check-ins, and structured reviews inside your vault.",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-		"test": "node --import jiti/register --test tests/okr-utils.test.mjs tests/okr-period.test.mjs",
+		"test": "node --import jiti/register --test tests/okr-utils.test.mjs tests/okr-period.test.mjs tests/okr-health.test.mjs tests/okr-reviews.test.mjs",
 		"version": "node version-bump.mjs && git add manifest.json versions.json",
 		"lint": "eslint . --max-warnings 0"
 	},

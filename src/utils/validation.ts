@@ -1,6 +1,10 @@
 import type { KRUnit } from "../types";
 import { diffLocalDates, parseLocalDate } from "./date";
 
+export function isValidKeyResultWeight(weight: number): boolean {
+	return Number.isFinite(weight) && weight > 0;
+}
+
 export function isValidKeyResultValues(
 	unit: KRUnit,
 	current: number,

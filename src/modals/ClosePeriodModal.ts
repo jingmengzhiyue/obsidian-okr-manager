@@ -3,6 +3,7 @@ import { OKRManager } from "../manager/OKRManager";
 import type { RolloverCandidate, RolloverSelection } from "../types";
 import { getNextPeriod } from "../utils/period";
 import { ConfirmModal } from "./ConfirmModal";
+import { ReviewEditorModal } from "./ReviewEditorModal";
 
 export class ClosePeriodModal extends Modal {
 	private candidates: RolloverCandidate[] = [];
@@ -10,6 +11,7 @@ export class ClosePeriodModal extends Modal {
 	private readonly selectedObjectives = new Set<string>();
 	private readonly selectedKeyResults = new Set<string>();
 	private isSubmitting = false;
+	private hasRetrospective = false;
 
 	constructor(
 		app: App,
@@ -41,7 +43,10 @@ export class ClosePeriodModal extends Modal {
 		try {
 			const info = await this.manager.getPeriodInfo(this.period);
 			this.targetPeriod = getNextPeriod(this.period, info.periodType) ?? "";
-			this.candidates = await this.manager.getRolloverCandidates(this.period);
+			[this.candidates, this.hasRetrospective] = await Promise.all([
+				this.manager.getRolloverCandidates(this.period),
+				this.manager.hasPeriodReview(this.period, "retrospective"),
+			]);
 			for (const candidate of this.candidates) {
 				this.selectedObjectives.add(candidate.objective.id);
 				for (const keyResult of candidate.keyResults) {
@@ -61,6 +66,29 @@ export class ClosePeriodModal extends Modal {
 			cls: "okr-modal-title",
 			text: this.t("modals.closePeriod.title", { period: this.period }),
 		});
+		if (!this.hasRetrospective) {
+			const warning = this.contentEl.createDiv("okr-review-required-warning");
+			warning.createEl("strong", {
+				text: this.t("modals.closePeriod.missingRetrospectiveWarning"),
+			});
+			const createReview = warning.createEl("button", {
+				cls: "okr-btn-secondary",
+				text: this.t("actions.writeRetrospective"),
+			});
+			createReview.addEventListener("click", () => {
+				new ReviewEditorModal(
+					this.app,
+					this.manager,
+					this.period,
+					"retrospective",
+					undefined,
+					() => {
+						this.hasRetrospective = true;
+						this.renderForm();
+					},
+				).open();
+			});
+		}
 
 		const targetField = this.contentEl.createDiv("okr-field");
 		const targetLabel = targetField.createEl("label", {
@@ -145,11 +173,33 @@ export class ClosePeriodModal extends Modal {
 				title: this.t("modals.closePeriod.noRolloverTitle"),
 				message: this.t("modals.closePeriod.noRolloverConfirm"),
 				confirmText: this.t("actions.closePeriod"),
-				onConfirm: () => this.submit(selections, true),
+				onConfirm: () =>
+					this.confirmRetrospective(selections, true),
 			}).open();
 			return;
 		}
-		await this.submit(selections, false);
+		await this.confirmRetrospective(selections, false);
+	}
+
+	private async confirmRetrospective(
+		selections: RolloverSelection[],
+		allowUnfinishedWithoutRollover: boolean,
+	): Promise<void> {
+		if (!this.hasRetrospective) {
+			new ConfirmModal(this.app, {
+				title: this.t("modals.closePeriod.missingRetrospectiveTitle"),
+				message: this.t("modals.closePeriod.missingRetrospectiveConfirm"),
+				confirmText: this.t("actions.closePeriod"),
+				onConfirm: () =>
+					this.submit(
+						selections,
+						allowUnfinishedWithoutRollover,
+						true,
+					),
+			}).open();
+			return;
+		}
+		await this.submit(selections, allowUnfinishedWithoutRollover, false);
 	}
 
 	private buildSelections(): RolloverSelection[] {
@@ -166,6 +216,7 @@ export class ClosePeriodModal extends Modal {
 	private async submit(
 		selections: RolloverSelection[],
 		allowUnfinishedWithoutRollover: boolean,
+		allowMissingRetrospective: boolean,
 	): Promise<void> {
 		if (this.isSubmitting) {
 			return;
@@ -177,6 +228,7 @@ export class ClosePeriodModal extends Modal {
 				targetPeriod: this.targetPeriod,
 				selections,
 				allowUnfinishedWithoutRollover,
+				allowMissingRetrospective,
 			});
 			new Notice(this.t("notices.periodClosed", { period: this.period }));
 			this.close();

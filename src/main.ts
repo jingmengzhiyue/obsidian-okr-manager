@@ -6,6 +6,7 @@ import { OKRDetailRenderer } from "./views/OKRDetailRenderer";
 import { NewObjectiveModal } from "./modals/NewObjectiveModal";
 import { NewKRModal } from "./modals/NewKRModal";
 import { CheckInModal } from "./modals/CheckInModal";
+import { PeriodReviewsModal } from "./modals/PeriodReviewsModal";
 import { SettingsTab } from "./settings/SettingsTab";
 import { createI18n, detectLocale, type I18n } from "./i18n";
 import { revealLeafCompat } from "./utils/workspace";
@@ -84,6 +85,11 @@ export default class OKRPlugin extends Plugin {
 			id: "okr-open-dashboard",
 			name: this.i18n.t("actions.openDashboard"),
 			callback: () => this.activateDashboard(),
+		});
+		this.addCommand({
+			id: "okr-period-reviews",
+			name: this.i18n.t("actions.periodReviews"),
+			callback: () => new PeriodReviewsModal(this.app, this.manager).open(),
 		});
 		this.addCommand({
 			id: "okr-migrate-legacy-progress-records",

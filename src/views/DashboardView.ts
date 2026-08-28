@@ -15,6 +15,7 @@ import { NewObjectiveModal } from "../modals/NewObjectiveModal";
 import { PostponeObjectiveModal } from "../modals/PostponeObjectiveModal";
 import { ClosePeriodModal } from "../modals/ClosePeriodModal";
 import { PeriodTemplatesModal } from "../modals/PeriodTemplatesModal";
+import { PeriodReviewsModal } from "../modals/PeriodReviewsModal";
 import { SavePeriodTemplateModal } from "../modals/SavePeriodTemplateModal";
 import { KeyResult, Objective, OKRPeriodInfo } from "../types";
 import {
@@ -22,6 +23,11 @@ import {
 	getObjectiveStatusLabel,
 } from "../utils/objectiveStatus";
 import { reorderKeyResultOrders } from "../utils/sort";
+import {
+	calculateKeyResultHealth,
+	calculateObjectiveHealth,
+	getNormalizedKeyResultWeight,
+} from "../utils/health";
 
 export const DASHBOARD_VIEW_TYPE = "okr-dashboard";
 
@@ -331,6 +337,8 @@ export class DashboardView extends ItemView {
 		});
 
 		const headerRight = header.createDiv("okr-obj-header-right");
+		const health = calculateObjectiveHealth(obj);
+		this.renderHealthBadge(headerRight, health);
 		headerRight.createSpan({
 			cls: `okr-badge okr-status-${obj.status}`,
 			text: getObjectiveStatusLabel(obj.status, this.manager.getI18n()),
@@ -424,6 +432,16 @@ export class DashboardView extends ItemView {
 		});
 
 		const right = row.createDiv("okr-kr-row-right");
+		const objectiveKeyResults = this.krsMap.get(objective.id) ?? [];
+		const normalizedWeight = getNormalizedKeyResultWeight(
+			kr,
+			objectiveKeyResults,
+		);
+		right.createSpan({
+			cls: "okr-weight-badge",
+			text: `${this.t("health.weightShort")} ${kr.weight} · ${normalizedWeight}%`,
+		});
+		this.renderHealthBadge(right, calculateKeyResultHealth(kr));
 		this.renderProgressRing(right, kr.progress);
 		right.createSpan({ cls: "okr-kr-pct", text: `${kr.progress}%` });
 
@@ -924,6 +942,16 @@ export class DashboardView extends ItemView {
 			);
 		}
 		menu.addItem((item) =>
+			item.setTitle(this.t("actions.periodReviews")).onClick(() => {
+				new PeriodReviewsModal(
+					this.app,
+					this.manager,
+					this.currentPeriod,
+					() => this.scheduleRender(),
+				).open();
+			}),
+		);
+		menu.addItem((item) =>
 			item.setTitle(this.t("actions.manageTemplates")).onClick(() => {
 				new PeriodTemplatesModal(this.app, this.manager, (targetPeriod) => {
 					if (targetPeriod) {
@@ -957,6 +985,26 @@ export class DashboardView extends ItemView {
 
 	private getObjectiveStateKey(objective: Objective): string {
 		return `${objective.period}::${objective.id}`;
+	}
+
+	private renderHealthBadge(
+		container: HTMLElement,
+		health: ReturnType<typeof calculateKeyResultHealth>,
+	): void {
+		const score = health.score == null ? "—" : String(health.score);
+		const badge = container.createSpan({
+			cls: `okr-health-badge okr-health-${health.status}`,
+			text: `${this.t(`health.status.${health.status}`)} ${score}`,
+		});
+		const reasons = health.reasons.map((reason) =>
+			this.t(`health.reason.${reason}`),
+		);
+		badge.setAttribute(
+			"title",
+			reasons.length > 0
+				? reasons.join(this.t("common.listSeparator"))
+				: this.t("health.noRiskSignals"),
+		);
 	}
 
 	private t(key: string, values?: Record<string, string | number>): string {
