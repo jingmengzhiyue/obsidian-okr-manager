@@ -50,4 +50,4 @@ jobs:
                   gh release create "$GITHUB_REF_NAME" \
                     main.js manifest.json styles.css \
                     --title "$GITHUB_REF_NAME" \
-                    --generate-notes
+                    --notes-file "docs/releases/$GITHUB_REF_NAME.md"
