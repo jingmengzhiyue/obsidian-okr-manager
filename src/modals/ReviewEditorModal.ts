@@ -28,6 +28,7 @@ export class ReviewEditorModal extends Modal {
 		private onComplete?: (review: PeriodReview) => void,
 	) {
 		super(app);
+		this.review = review ? { ...review, sections: { ...review.sections } } : undefined;
 		this.reviewDate = review?.reviewDate ?? getTodayLocalDate();
 		this.sections = review
 			? { ...review.sections }
@@ -145,6 +146,7 @@ export class ReviewEditorModal extends Modal {
 						period: this.period,
 						reviewId: this.review.id,
 						sections: this.sections,
+						baseSections: this.review.sections,
 					})
 				: await this.manager.createPeriodReview({
 						period: this.period,

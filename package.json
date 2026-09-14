@@ -1,13 +1,13 @@
 {
 	"name": "vault-okr-manager",
-	"version": "1.4.0",
+	"version": "1.4.1",
 	"description": "Manage weighted OKRs, health signals, check-ins, and structured reviews inside your vault.",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-		"test": "node --import jiti/register --test tests/okr-utils.test.mjs tests/okr-period.test.mjs tests/okr-health.test.mjs tests/okr-reviews.test.mjs",
+		"test": "node --import jiti/register --test tests/okr-edit-conflicts.test.mjs tests/okr-health.test.mjs tests/okr-parser-safety.test.mjs tests/okr-period.test.mjs tests/okr-persistence.test.mjs tests/okr-reviews.test.mjs tests/okr-rollover-safety.test.mjs tests/okr-utils.test.mjs",
 		"version": "node version-bump.mjs && git add manifest.json versions.json",
 		"lint": "eslint . --max-warnings 0"
 	},
@@ -23,6 +23,7 @@
 		"eslint-plugin-obsidianmd": "^0.4.2",
 		"globals": "14.0.0",
 		"jiti": "2.6.1",
+		"js-yaml": "4.1.1",
 		"obsidian": "^1.13.1",
 		"tslib": "2.4.0",
 		"typescript": "^5.8.3",

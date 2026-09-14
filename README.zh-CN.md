@@ -5,10 +5,10 @@
 一个本地优先的 Obsidian OKR 插件，用于在 Markdown 中规划加权 OKR、监控执行健康度、记录进度，并运行结构化周期回顾。
 
 ![Obsidian](https://img.shields.io/badge/Obsidian-%3E%3D1.7.2-blueviolet)
-![Version](https://img.shields.io/badge/version-1.4.0-blue)
+![Version](https://img.shields.io/badge/version-1.4.1-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-[English README](./README.md) · [1.4.0 发布说明](./docs/releases/1.4.0.md) · [功能特性](#功能特性) · [快速开始](#快速开始) · [健康度模型](#进度与健康度模型) · [回顾流程](#结构化回顾流程) · [存储模型](#markdown-存储模型)
+[English README](./README.md) · [1.4.1 发布说明](./docs/releases/1.4.1.md) · [功能特性](#功能特性) · [快速开始](#快速开始) · [健康度模型](#进度与健康度模型) · [回顾流程](#结构化回顾流程) · [存储模型](#markdown-存储模型)
 
 </div>
 

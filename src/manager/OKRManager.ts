@@ -7,6 +7,7 @@ import {
 } from "obsidian";
 import { createI18n, type I18n, type TranslationValue } from "../i18n";
 import { FileParser } from "./FileParser";
+import { EditConflictError, getEditPatch } from "../utils/editConflict";
 import {
 	ApplyPeriodTemplateInput,
 	CheckIn,
@@ -352,14 +353,8 @@ export class OKRManager {
 		return this.withPeriodLocks([period], async () => {
 			await this.assertPeriodWritable(period);
 			const existing = await this.getObjectiveSummaries(period);
-			const nextId =
-				existing.reduce((max, objective) => {
-					const parsed = Number.parseInt(
-						objective.id.replace("O", ""),
-						10,
-					);
-					return Math.max(max, Number.isNaN(parsed) ? 0 : parsed);
-				}, 0) + 1;
+			const reserved = await this.getReferencedIds(period);
+			const nextId = this.getNextObjectiveNumber(existing, reserved);
 			const id = `O${nextId}`;
 			const fileName = this.parser.generateObjectiveFileName(id);
 			const periodDir = this.getPeriodDir(period);
@@ -427,11 +422,14 @@ export class OKRManager {
 		}
 
 		let created: KeyResult | null = null;
+		const reserved = await this.getReferencedIds(entry.objective.period);
 		await this.mutateObjective(entry.file, (objective) => {
 			const existing = objective.keyResults;
 			const nextIndex =
-				existing.reduce((max, keyResult) => {
-					const match = keyResult.id.match(/-KR(\d+)$/);
+				[...existing.map((item) => item.id), ...reserved]
+				.filter((id) => id.startsWith(`${objective.id}-KR`))
+				.reduce((max, id) => {
+					const match = id.match(/-KR(\d+)$/);
 					const value = match
 						? Number.parseInt(match[1] ?? "0", 10)
 						: 0;
@@ -485,6 +483,7 @@ export class OKRManager {
 			Objective,
 			"title" | "description" | "owner" | "status" | "due"
 		>,
+		base?: Objective,
 	): Promise<Objective> {
 		const entry = await this.findObjectiveEntry(objectiveId, period);
 		if (!entry) {
@@ -493,13 +492,13 @@ export class OKRManager {
 			);
 		}
 
+		const desired = {
+			title: updates.title.trim(), description: updates.description.trim(),
+			owner: updates.owner.trim(), status: updates.status, due: updates.due,
+		};
 		return this.mutateObjective(entry.file, (objective) => ({
 			...objective,
-			title: updates.title.trim(),
-			description: updates.description.trim(),
-			owner: updates.owner.trim(),
-			status: updates.status,
-			due: updates.due,
+			...getEditPatch(base ?? entry.objective, objective, desired),
 		}));
 	}
 
@@ -518,6 +517,7 @@ export class OKRManager {
 			| "confidence"
 			| "due"
 		> & { weight?: number },
+		base?: KeyResult,
 	): Promise<KeyResult> {
 		if (!isValidKeyResultValues(updates.unit, updates.current, updates.target)) {
 			throw new Error(this.t("errors.invalidKeyResultValues"));
@@ -530,37 +530,51 @@ export class OKRManager {
 			throw new Error(this.t("errors.keyResultNotFound", { id: krId }));
 		}
 
+		const original = base ?? found.objective.keyResults.find((item) => item.id === krId);
 		let updatedKeyResult: KeyResult | null = null;
 		await this.mutateObjective(found.file, (objective) => {
 			const updatedKeyResults = objective.keyResults.map((item) => {
 				if (item.id !== krId) {
 					return item;
 				}
-				const weight = updates.weight ?? item.weight ?? 1;
-				if (!isValidKeyResultWeight(weight)) {
+				const desired = {
+					title: updates.title.trim(), description: updates.description.trim(),
+					owner: updates.owner.trim(), unit: updates.unit,
+					current: updates.current, target: updates.target,
+					status: updates.status, confidence: updates.confidence, due: updates.due,
+					...(updates.weight === undefined ? {} : { weight: updates.weight }),
+				};
+				const baseline = original ?? item;
+				const metricFields = ["unit", "current", "target"] as const;
+				// A target/unit edit and a concurrent measurement are not independent:
+				// combining them could change the meaning of the recorded progress.
+				if (
+					metricFields.some((field) => desired[field] !== baseline[field]) &&
+					metricFields.some((field) => item[field] !== baseline[field]) &&
+					metricFields.some((field) => desired[field] !== item[field])
+				) {
+					throw new EditConflictError([...metricFields]);
+				}
+				const merged = { ...item, ...getEditPatch(baseline, item, desired) };
+				const weight = merged.weight ?? 1;
+				if (
+					!isValidKeyResultWeight(weight) ||
+					!isValidKeyResultValues(merged.unit, merged.current, merged.target)
+				) {
 					throw new Error(this.t("errors.invalidKeyResultValues"));
 				}
 
 				const progress = this.settings.autoComputeProgress
 					? this.parser.calculateKRProgress(
-							updates.current,
-							updates.target,
-							updates.unit,
+							merged.current,
+							merged.target,
+							merged.unit,
 						)
 					: this.parser.clampProgress(item.progress);
 				updatedKeyResult = {
-					...item,
-					title: updates.title.trim(),
-					description: updates.description.trim(),
-					owner: updates.owner.trim(),
-					unit: updates.unit,
+					...merged,
 					weight,
-					current: updates.current,
-					target: updates.target,
 					progress,
-					status: updates.status,
-					confidence: updates.confidence,
-					due: updates.due,
 				};
 				return updatedKeyResult;
 			});
@@ -629,31 +643,37 @@ export class OKRManager {
 			) {
 				throw new Error(this.t("errors.invalidCheckInValues"));
 			}
-			const latestProgress = history[0]?.progress ?? 0;
-			const delta =
-				history.length > 0 ? progress - latestProgress : progress;
 			const recordedAt = new Date().toISOString();
 			const nextCheckIn: CheckIn = {
 				id: `${params.krId}-${recordedAt}-${crypto.randomUUID()}`,
 				krId: params.krId,
 				date: params.date,
 				progress,
-				delta,
+				delta: 0,
 				note: params.note.trim(),
 				blocker: params.blocker.trim(),
 				recordedAt,
 			};
+			// Business dates define historical progress. Inserting an old record must
+			// not roll back today's value or blocker. Same-day entries use save order.
+			const chronological = [...history].reverse().sort((left, right) =>
+				left.date.localeCompare(right.date) || left.recordedAt.localeCompare(right.recordedAt),
+			);
+			const insertionIndex = chronological.findIndex((item) => item.date > params.date);
+			const isLatest = insertionIndex === -1;
+			chronological.splice(isLatest ? chronological.length : insertionIndex, 0, nextCheckIn);
+			const checkIns = chronological.map((item, index) => ({
+				...item,
+				delta: item.progress - (chronological[index - 1]?.progress ?? 0),
+			})).reverse();
 			const updatedKeyResults = objective.keyResults.map((item) =>
 				item.id === params.krId
 					? {
 							...item,
-							current,
-							progress,
-							checkIns: [...item.checkIns, nextCheckIn].sort(
-								(left, right) =>
-									right.recordedAt.localeCompare(left.recordedAt),
-							),
-							hasBlocker: nextCheckIn.blocker.length > 0,
+							current: isLatest ? current : item.current,
+							progress: isLatest ? progress : item.progress,
+							checkIns,
+							hasBlocker: isLatest ? nextCheckIn.blocker.length > 0 : item.hasBlocker,
 						}
 					: item,
 			);
@@ -866,12 +886,16 @@ export class OKRManager {
 	async getRolloverCandidates(period: string): Promise<RolloverCandidate[]> {
 		const normalizedPeriod = this.normalizePeriod(period);
 		const info = await this.getPeriodInfo(normalizedPeriod);
-		const alreadyRolled = new Set(
-			info.rollovers.map((mapping) => mapping.sourceObjectiveId),
-		);
+		const objectives = await this.getObjectiveSummaries(normalizedPeriod);
+		const alreadyRolled = new Set(objectives
+			.filter((objective) => objective.keyResults.length === 0 &&
+				info.rollovers.some((mapping) => mapping.sourceObjectiveId === objective.id))
+			.map((objective) => objective.id));
 		return getIncompleteObjectives(
-			await this.getObjectiveSummaries(normalizedPeriod),
+			objectives,
 			alreadyRolled,
+			this.settings.autoComputeProgress,
+			new Set(info.rollovers.flatMap((mapping) => mapping.sourceKeyResultIds)),
 		);
 	}
 
@@ -963,7 +987,8 @@ export class OKRManager {
 					}
 					await this.assertPeriodWritable(targetPeriod);
 					const existing = await this.getObjectiveSummaries(targetPeriod);
-					let nextId = this.getNextObjectiveNumber(existing);
+					const reserved = await this.getReferencedIds(targetPeriod);
+					let nextId = this.getNextObjectiveNumber(existing, reserved);
 					const today = formatLocalDate(new Date());
 					const due = this.parser.getDueForPeriod(targetPeriod, targetType) ?? today;
 					for (const candidate of selectedCandidates) {
@@ -1168,9 +1193,10 @@ export class OKRManager {
 			const due = this.parser.getDueForPeriod(targetPeriod, targetType) ?? today;
 			const createdFiles: TFile[] = [];
 			const createdObjectives: Objective[] = [];
+			const firstId = this.getNextObjectiveNumber([], await this.getReferencedIds(targetPeriod));
 			try {
 				for (const [objectiveIndex, blueprint] of template.objectives.entries()) {
-					const id = `O${objectiveIndex + 1}`;
+					const id = `O${firstId + objectiveIndex}`;
 					const filePath = normalizeVaultPath(
 						`${this.getPeriodDir(targetPeriod)}/${this.parser.generateObjectiveFileName(id)}`,
 					);
@@ -1320,6 +1346,7 @@ export class OKRManager {
 				input.reviewId,
 				input.sections,
 				new Date().toISOString(),
+				input.baseSections,
 			);
 		});
 	}
@@ -1607,10 +1634,11 @@ export class OKRManager {
 		content: string,
 		objective: Objective,
 	): string {
+		const existing = this.parser.parseFrontmatterContent(content, objective.filePath);
 		const frontmatter = {
 			[FRONTMATTER_OKR_TYPE]: OKR_TYPE_OBJECTIVE,
-			...this.parser.buildObjectiveFrontmatter(objective),
-			[FRONTMATTER_TAGS]: ["okr", "objective"],
+			...this.parser.buildObjectiveFrontmatter(objective, existing),
+			[FRONTMATTER_TAGS]: existing[FRONTMATTER_TAGS] ?? ["okr", "objective"],
 		};
 		const body = this.parser.syncCheckInsMarkdown(content, objective);
 		return `---\n${stringifyYaml(frontmatter).trim()}\n---\n\n${body.trimStart()}`;
@@ -1699,6 +1727,11 @@ export class OKRManager {
 		await previous.catch(() => undefined);
 		try {
 			return await task();
+		} catch (error) {
+			if (error instanceof EditConflictError) {
+				throw new Error(this.t("errors.editConflict", { fields: error.fields.join(", ") }));
+			}
+			throw error;
 		} finally {
 			release();
 			if (this.periodMutationQueues.get(period) === queue) {
@@ -1707,13 +1740,42 @@ export class OKRManager {
 		}
 	}
 
-	private getNextObjectiveNumber(objectives: Objective[]): number {
+	private getNextObjectiveNumber(objectives: Objective[], reserved: ReadonlySet<string> = new Set()): number {
 		return (
-			objectives.reduce((maximum, objective) => {
-				const value = Number.parseInt(objective.id.slice(1), 10);
+			[...objectives.map((objective) => objective.id), ...reserved].reduce((maximum, id) => {
+				const value = Number.parseInt(id.slice(1), 10);
 				return Math.max(maximum, Number.isNaN(value) ? 0 : value);
 			}, 0) + 1
 		);
+	}
+
+	private async getReferencedIds(period: string): Promise<Set<string>> {
+		const reserved = new Set<string>();
+		const infos = await this.getPeriodInfos({ includeArchived: true });
+		const local = await this.getPeriodInfo(period);
+		// IDs referenced by closed periods or snapshots must never identify a new
+		// entity after deletion. Read metadata and this period's reviews, not all bodies.
+		for (const info of [...infos, local]) {
+			for (const mapping of info.rollovers) {
+				if (info.period === period) {
+					reserved.add(mapping.sourceObjectiveId);
+					mapping.sourceKeyResultIds.forEach((id) => reserved.add(id));
+				}
+				if (mapping.targetPeriod === period) {
+					reserved.add(mapping.targetObjectiveId);
+					// Rollover assigns contiguous destination KR numbers in selection order.
+					mapping.sourceKeyResultIds.forEach((_, index) =>
+						reserved.add(`${mapping.targetObjectiveId}-KR${index + 1}`));
+				}
+			}
+		}
+		for (const review of await this.reviewRepository.listReviews(period)) {
+			for (const objective of review.snapshot.objectives) {
+				reserved.add(objective.id);
+				objective.keyResults.forEach((kr) => reserved.add(kr.id));
+			}
+		}
+		return reserved;
 	}
 
 	private async createObjectiveFile(objective: Objective): Promise<TFile> {
@@ -1739,6 +1801,13 @@ export class OKRManager {
 				await this.app.fileManager.trashFile(file);
 			} catch {
 				residualPaths.push(file.path);
+			} finally {
+				// Creation already updated our caches. Do not depend on delayed Vault
+				// events to remove rolled-back entries before the user retries.
+				const period = this.extractPeriodFromPath(file.path);
+				if (period) {
+					this.invalidatePeriodCaches(period);
+				}
 			}
 		}
 		return residualPaths;

@@ -32,6 +32,7 @@ export class EditKRModal extends Modal {
 		private options: EditKRModalOptions = {},
 	) {
 		super(app);
+		this.keyResult = { ...keyResult };
 		this.titleValue = keyResult.title;
 		this.owner = keyResult.owner;
 		this.unit = keyResult.unit;
@@ -349,6 +350,7 @@ export class EditKRModal extends Modal {
 					confidence: this.confidence,
 					due: this.due,
 				},
+				this.keyResult,
 			);
 			new Notice(
 				this.t("modals.updateKeyResult.saved", {

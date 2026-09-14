@@ -53,16 +53,22 @@ export function getNextPeriod(
 	}
 }
 
-export function isIncompleteKeyResult(keyResult: KeyResult): boolean {
+export function isIncompleteKeyResult(
+	keyResult: KeyResult,
+	autoComputeProgress = false,
+): boolean {
 	return (
 		(keyResult.status === "active" || keyResult.status === "on-hold") &&
-		keyResult.progress < 100
+		// Rounded display percentages must not decide whether a numeric target is met.
+		(autoComputeProgress ? keyResult.current < keyResult.target : keyResult.progress < 100)
 	);
 }
 
 export function getIncompleteObjectives(
 	objectives: Objective[],
 	alreadyRolledObjectiveIds: ReadonlySet<string> = new Set(),
+	autoComputeProgress = false,
+	alreadyRolledKeyResultIds: ReadonlySet<string> = new Set(),
 ): RolloverCandidate[] {
 	return objectives.flatMap((objective) => {
 		if (
@@ -72,7 +78,11 @@ export function getIncompleteObjectives(
 			return [];
 		}
 
-		const keyResults = objective.keyResults.filter(isIncompleteKeyResult);
+		const keyResults = objective.keyResults.filter(
+			(keyResult) =>
+				!alreadyRolledKeyResultIds.has(keyResult.id) &&
+				isIncompleteKeyResult(keyResult, autoComputeProgress),
+		);
 		if (objective.keyResults.length > 0 && keyResults.length === 0) {
 			return [];
 		}

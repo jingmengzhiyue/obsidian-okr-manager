@@ -27,6 +27,7 @@ export class EditObjectiveModal extends Modal {
 		private options: EditObjectiveModalOptions = {},
 	) {
 		super(app);
+		this.objective = { ...objective };
 		this.titleValue = objective.title;
 		this.owner = objective.owner;
 		this.due = objective.due;
@@ -190,6 +191,7 @@ export class EditObjectiveModal extends Modal {
 					status: this.status,
 					due: this.due,
 				},
+				this.objective,
 			);
 			new Notice(this.t("modals.updateObjective.saved", { title: updated.title }));
 			this.options.onComplete?.();

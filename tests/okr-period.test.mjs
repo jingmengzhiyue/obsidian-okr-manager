@@ -198,7 +198,7 @@ test("objective rollover origin round-trips and old objectives stay compatible",
 	);
 });
 
-test("check-in parser reads multiple CRLF blocks and replaces duplicate IDs", () => {
+test("check-in parser reads multiple CRLF blocks and deduplicates identical records", () => {
 	const parser = new FileParser({});
 	const secondKeyResult = {
 		...objective().keyResults[0],
@@ -221,7 +221,7 @@ test("check-in parser reads multiple CRLF blocks and replaces duplicate IDs", ()
 			"<!-- OKR-CHECKINS-END -->",
 		].join("\r\n");
 	const content = [
-		block("O1-KR1", "duplicate", 20, "old"),
+		block("O1-KR1", "duplicate", 40, "new"),
 		block("O1-KR1", "duplicate", 40, "new"),
 		block("O1-KR2", "second", 60, "second"),
 	].join("\r\n");
@@ -246,6 +246,7 @@ test("check-in parser reads multiple CRLF blocks and replaces duplicate IDs", ()
 
 test("closing a period carries selected data, clears history, and writes metadata last", async () => {
 	const manager = new OKRManager({}, DEFAULT_SETTINGS, createI18n("en"));
+	manager.getReferencedIds = async () => new Set();
 	const source = objective();
 	const events = [];
 	const infos = new Map([
@@ -307,6 +308,7 @@ test("closing without rollover requires explicit authorization", async () => {
 
 test("a failed rollover removes files created by the same operation and leaves source open", async () => {
 	const manager = new OKRManager({}, DEFAULT_SETTINGS, createI18n("en"));
+	manager.getReferencedIds = async () => new Set();
 	const first = objective();
 	const second = objective({ id: "O2", filePath: "OKR/2026-Q2/O2.md" });
 	const infos = new Map([
@@ -438,6 +440,7 @@ test("period lock serializes ordinary writes before close", async () => {
 
 test("template application resets structural state for every KR unit", async () => {
 	const manager = new OKRManager({}, DEFAULT_SETTINGS, createI18n("en"));
+	manager.getReferencedIds = async () => new Set();
 	manager.getPeriodInfo = async (period) => periodInfo(period);
 	manager.assertPeriodWritable = async () => {};
 	manager.getObjectiveSummaries = async () => [];
@@ -499,4 +502,50 @@ test("template application rejects a non-empty target period", async () => {
 		}),
 		/without objectives/,
 	);
+});
+
+test("reopened partial rollover keeps remaining KRs and preserves previous mappings", async () => {
+	const manager = new OKRManager({}, DEFAULT_SETTINGS, createI18n("en"));
+	manager.getReferencedIds = async () => new Set();
+	const source = objective();
+	source.keyResults.push({ ...source.keyResults[0], id: "O1-KR2", order: 1 });
+	const mapping = { sourceObjectiveId: "O1", sourceKeyResultIds: ["O1-KR1"], targetPeriod: "2026-Q3", targetObjectiveId: "O1" };
+	const infos = new Map([
+		["2026-Q2", periodInfo("2026-Q2", "open", [mapping])],
+		["2026-Q3", periodInfo("2026-Q3")],
+	]);
+	manager.getPeriodInfo = async period => infos.get(period);
+	manager.getObjectiveSummaries = async period => period === "2026-Q2" ? [source] : [objective({ period: "2026-Q3" })];
+	manager.assertPeriodWritable = async () => {};
+	manager.createObjectiveFile = async created => ({ path: created.filePath });
+	manager.periodRepository.writePeriodInfo = async info => infos.set(info.period, info);
+	const candidates = await manager.getRolloverCandidates("2026-Q2");
+	assert.equal(candidates.length, 1);
+	assert.deepEqual(candidates[0].keyResults.map(item => item.id), ["O1-KR2"]);
+	const result = await manager.closePeriod({ period: "2026-Q2", targetPeriod: "2026-Q3", selections: [{ objectiveId: "O1", keyResultIds: ["O1-KR2"] }], allowMissingRetrospective: true });
+	assert.equal(result.createdObjectives.length, 1);
+	assert.equal(infos.get("2026-Q2").rollovers.length, 2);
+	assert.deepEqual(infos.get("2026-Q2").rollovers[0], mapping);
+	assert.deepEqual(infos.get("2026-Q2").rollovers[1].sourceKeyResultIds, ["O1-KR2"]);
+});
+
+test("rollover candidates distinguish automatic numeric completion from manual progress", async () => {
+	for (const autoComputeProgress of [true, false]) {
+		const manager = new OKRManager({}, { ...DEFAULT_SETTINGS, autoComputeProgress }, createI18n("en"));
+		const source = objective();
+		Object.assign(source.keyResults[0], { current: 199, target: 200, progress: 100 });
+		manager.getPeriodInfo = async () => periodInfo("2026-Q2");
+		manager.getObjectiveSummaries = async () => [source];
+		assert.equal((await manager.getRolloverCandidates("2026-Q2")).length, autoComputeProgress ? 1 : 0);
+	}
+});
+
+test("a rolled empty objective only becomes eligible again when new KRs are added", async () => {
+	const manager = new OKRManager({}, DEFAULT_SETTINGS, createI18n("en"));
+	const source = objective({ keyResults: [] });
+	manager.getPeriodInfo = async () => periodInfo("2026-Q2", "open", [{ sourceObjectiveId: "O1", sourceKeyResultIds: [], targetPeriod: "2026-Q3", targetObjectiveId: "O1" }]);
+	manager.getObjectiveSummaries = async () => [source];
+	assert.equal((await manager.getRolloverCandidates("2026-Q2")).length, 0);
+	source.keyResults.push(objective().keyResults[0]);
+	assert.equal((await manager.getRolloverCandidates("2026-Q2")).length, 1);
 });

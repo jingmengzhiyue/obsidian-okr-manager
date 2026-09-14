@@ -232,6 +232,7 @@ export interface UpdatePeriodReviewInput {
 	period: OKRPeriod;
 	reviewId: string;
 	sections: ReviewSections;
+	baseSections?: ReviewSections;
 }
 
 export interface OKRPluginSettings {

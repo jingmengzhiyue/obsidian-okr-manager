@@ -31,6 +31,7 @@ import type {
 	ReviewSnapshot,
 } from "../types";
 import { parseLocalDate } from "../utils/date";
+import { EditConflictError, getEditPatch } from "../utils/editConflict";
 import { normalizeVaultPath } from "../utils/path";
 import {
 	createEmptyReviewSections,
@@ -168,6 +169,7 @@ export class ReviewRepository {
 		reviewId: string,
 		sections: ReviewSections,
 		updatedAt: string,
+		baseSections?: ReviewSections,
 	): Promise<PeriodReview> {
 		const review = await this.getReview(period, reviewId);
 		if (!review) {
@@ -177,10 +179,23 @@ export class ReviewRepository {
 		if (!(file instanceof TFile)) {
 			throw new Error(`Period review file not found: ${review.filePath}`);
 		}
-		const updated = { ...review, sections, updatedAt };
-		await this.app.vault.process(file, (content) =>
-			this.buildUpdatedReviewContent(content, updated),
-		);
+		let updated = review;
+		await this.app.vault.process(file, (content) => {
+			const frontmatter = this.parser.parseFrontmatterContent(content, file.path);
+			const latest = this.parseReview(frontmatter, content, file.path, period);
+			if (latest.id !== reviewId) {
+				throw new EditConflictError(["review-id"]);
+			}
+			updated = {
+				...latest,
+				sections: {
+					...latest.sections,
+					...getEditPatch(baseSections ?? review.sections, latest.sections, sections),
+				},
+				updatedAt,
+			};
+			return this.buildUpdatedReviewContent(content, updated);
+		});
 		this.cache.set(review.filePath, updated);
 		return updated;
 	}
@@ -368,7 +383,16 @@ export class ReviewRepository {
 	): string {
 		const current = this.parser.parseFrontmatterContent(content, review.filePath);
 		const body = this.stripFrontmatter(content);
-		return this.buildReviewContent(current, body, review);
+		// Editing reflection text must preserve the recorded snapshot, including
+		// extensions and annotations written directly in the Markdown document.
+		current[FRONTMATTER_UPDATED_AT] = review.updatedAt;
+		const updatedBody = this.replaceManagedBlock(
+			body,
+			OKR_REVIEW_CONTENT_START,
+			OKR_REVIEW_CONTENT_END,
+			this.buildSectionsBlock(review.type, review.sections),
+		);
+		return `---\n${stringifyYaml(current).trim()}\n---\n\n${updatedBody.trim()}\n`;
 	}
 
 	private buildReviewContent(
@@ -406,7 +430,7 @@ export class ReviewRepository {
 			`${this.escapeRegExp(start)}[\\s\\S]*?${this.escapeRegExp(end)}`,
 		);
 		if (pattern.test(body)) {
-			return body.replace(pattern, replacement);
+			return body.replace(pattern, () => replacement);
 		}
 		return `${body.trimEnd()}\n\n${replacement}\n`;
 	}

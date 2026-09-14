@@ -110,6 +110,20 @@ export class FileParser {
 		fm: Record<string, unknown>,
 		content = "",
 	): Objective {
+		try {
+			return this.parseObjectiveData(file, fm, content);
+		} catch (error) {
+			const message =
+				error instanceof Error ? error.message : "invalid Objective data";
+			throw new Error(`Cannot parse Objective in ${file.path}: ${message}`);
+		}
+	}
+
+	private parseObjectiveData(
+		file: TFile,
+		fm: Record<string, unknown>,
+		content: string,
+	): Objective {
 		const id = this.parseObjectiveId(fm[FRONTMATTER_OKR_ID]);
 		const period = this.parseString(fm[FRONTMATTER_OKR_PERIOD]);
 		const periodType = this.parsePeriodType(
@@ -124,6 +138,18 @@ export class FileParser {
 			fm[FRONTMATTER_ROLLOVER_FROM],
 			file.path,
 		);
+		const keyResults = this.parseKeyResults(fm[FRONTMATTER_KEY_RESULTS], {
+			objectiveId: id,
+			period,
+			periodType,
+			filePath: file.path,
+			checkInsByKrId,
+		});
+		for (const krId of checkInsByKrId.keys()) {
+			if (!keyResults.some((keyResult) => keyResult.id === krId)) {
+				throw new Error(`Check-in references missing Key Result ${krId} in ${file.path}`);
+			}
+		}
 
 		return {
 			id,
@@ -134,25 +160,24 @@ export class FileParser {
 			owner: this.parseString(fm[FRONTMATTER_OWNER]),
 			status: this.parseStatus(fm[FRONTMATTER_STATUS]),
 			progress: this.clampProgress(
-				this.parseNumber(fm[FRONTMATTER_PROGRESS]),
+				this.parseStoredNumber(fm[FRONTMATTER_PROGRESS], "progress"),
 			),
 			created: this.parseString(fm[FRONTMATTER_CREATED]),
 			due: this.parseString(fm[FRONTMATTER_DUE]),
 			filePath: file.path,
-			keyResults: this.parseKeyResults(fm[FRONTMATTER_KEY_RESULTS], {
-				objectiveId: id,
-				period,
-				periodType,
-				filePath: file.path,
-				checkInsByKrId,
-			}),
+			keyResults,
 			...(rolloverFrom ? { rolloverFrom } : {}),
 		};
 	}
 
 	syncCheckInsMarkdown(content: string, objective: Objective): string {
+		// Refuse to replace managed text that could not be read without loss.
+		this.parseMarkdownCheckIns(content);
 		const body = this.stripFrontmatter(content).trimEnd();
 		const block = this.buildCheckInsBlock(objective);
+		// Legacy YAML records must also be readable in the Markdown format before
+		// their original representation can safely be removed.
+		this.parseMarkdownCheckIns(block);
 		const blockPattern = new RegExp(
 			`${this.escapeRegExp(OKR_CHECKINS_START)}[\\s\\S]*?${this.escapeRegExp(OKR_CHECKINS_END)}`,
 			"g",
@@ -311,8 +336,24 @@ export class FileParser {
 		return calculateObjectiveProgress(keyResults);
 	}
 
-	buildObjectiveFrontmatter(objective: Objective): Record<string, unknown> {
+	buildObjectiveFrontmatter(
+		objective: Objective,
+		existing: Record<string, unknown> = {},
+	): Record<string, unknown> {
+		const previousKeyResults = existing[FRONTMATTER_KEY_RESULTS];
+		const byId = new Map<string, Record<string, unknown>>();
+		if (Array.isArray(previousKeyResults)) {
+			for (const item of previousKeyResults) {
+				if (item && typeof item === "object" && !Array.isArray(item)) {
+					const record = item as Record<string, unknown>;
+					byId.set(this.parseString(record[FRONTMATTER_OKR_ID]), record);
+				}
+			}
+		}
+		const preserved = { ...existing };
+		delete preserved[FRONTMATTER_ROLLOVER_FROM];
 		return {
+			...preserved,
 			[FRONTMATTER_OKR_ID]: objective.id,
 			[FRONTMATTER_OKR_PERIOD]: objective.period,
 			[FRONTMATTER_OKR_PERIOD_TYPE]: objective.periodType,
@@ -323,9 +364,12 @@ export class FileParser {
 			[FRONTMATTER_PROGRESS]: this.clampProgress(objective.progress),
 			[FRONTMATTER_CREATED]: objective.created,
 			[FRONTMATTER_DUE]: objective.due,
-			[FRONTMATTER_KEY_RESULTS]: objective.keyResults.map((keyResult) =>
-				this.serializeKeyResult(keyResult),
-			),
+			[FRONTMATTER_KEY_RESULTS]: objective.keyResults.map((keyResult) => {
+				const previous = { ...byId.get(keyResult.id) };
+				// Legacy history has been merged into Markdown and must not resurrect deleted records.
+				delete previous.checkIns;
+				return { ...previous, ...this.serializeKeyResult(keyResult) };
+			}),
 			...(objective.rolloverFrom
 				? {
 						[FRONTMATTER_ROLLOVER_FROM]: {
@@ -445,8 +489,11 @@ export class FileParser {
 			checkInsByKrId: Map<string, CheckIn[]>;
 		},
 	): KeyResult[] {
-		if (!Array.isArray(value)) {
+		if (value === undefined) {
 			return [];
+		}
+		if (!Array.isArray(value)) {
+			throw new Error(`Invalid key-results in ${context.filePath}: expected an array`);
 		}
 
 		const parsed = value
@@ -472,6 +519,17 @@ export class FileParser {
 		}
 
 		return fallback;
+	}
+
+	private parseStoredNumber(value: unknown, field: string): number {
+		if (value === undefined) {
+			return 0;
+		}
+		const parsed = this.parseNumber(value, Number.NaN);
+		if (!Number.isFinite(parsed)) {
+			throw new Error(`Invalid numeric field ${field}`);
+		}
+		return parsed;
 	}
 
 	private parseNumber(value: unknown, fallback = 0): number {
@@ -556,10 +614,16 @@ export class FileParser {
 				`Key Result ID ${id} does not belong to Objective ${context.objectiveId}`,
 			);
 		}
-		const current = this.parseNumber(record[FRONTMATTER_CURRENT]);
-		const target = this.parseNumber(record[FRONTMATTER_TARGET]);
+		const current = this.parseStoredNumber(
+			record[FRONTMATTER_CURRENT], `${id}.current`,
+		);
+		const target = this.parseStoredNumber(
+			record[FRONTMATTER_TARGET], `${id}.target`,
+		);
 		const unit = this.parseUnit(record[FRONTMATTER_UNIT]);
-		const storedProgress = this.parseNumber(record[FRONTMATTER_PROGRESS]);
+		const storedProgress = this.parseStoredNumber(
+			record[FRONTMATTER_PROGRESS], `${id}.progress`,
+		);
 		const rawWeight = record[FRONTMATTER_WEIGHT];
 		const weight =
 			rawWeight == null ? 1 : this.parseNumber(rawWeight, Number.NaN);
@@ -630,15 +694,19 @@ export class FileParser {
 		value: unknown,
 		krId: string,
 	): KeyResult["checkIns"] {
-		if (!Array.isArray(value)) {
+		if (value === undefined) {
 			return [];
+		}
+		if (!Array.isArray(value)) {
+			throw new Error(`Invalid checkIns for ${krId}: expected an array`);
 		}
 
 		return value
-			.filter((item): item is Record<string, unknown> => {
-				return Boolean(item) && typeof item === "object";
-			})
-			.map((item, index) => {
+			.map((value: unknown, index) => {
+				if (!value || typeof value !== "object" || Array.isArray(value)) {
+					throw new Error(`Invalid check-in at index ${index} for ${krId}`);
+				}
+				const item = value as Record<string, unknown>;
 				const fallbackId = `${krId}-${index + 1}`;
 				const recordedAt = this.parseString(item.recordedAt);
 				return {
@@ -646,9 +714,9 @@ export class FileParser {
 					krId,
 					date: this.parseString(item.date),
 					progress: this.clampProgress(
-						this.parseNumber(item.progress),
+						this.parseStoredNumber(item.progress, `${krId}.checkIns.progress`),
 					),
-					delta: this.parseNumber(item.delta),
+					delta: this.parseStoredNumber(item.delta, `${krId}.checkIns.delta`),
 					note: this.parseString(item.note),
 					blocker: this.parseString(item.blocker),
 					recordedAt:
@@ -663,6 +731,15 @@ export class FileParser {
 
 	private parseMarkdownCheckIns(content: string): Map<string, CheckIn[]> {
 		const result = new Map<string, CheckIn[]>();
+		const markers = content.match(/<!-- OKR-CHECKINS-(?:START|END) -->/g) ?? [];
+		if (
+			markers.length % 2 !== 0 ||
+			markers.some((marker, index) =>
+				marker !== (index % 2 === 0 ? OKR_CHECKINS_START : OKR_CHECKINS_END),
+			)
+		) {
+			throw new Error("Invalid check-in region: unmatched or nested markers");
+		}
 		const blockPattern = new RegExp(
 			`${this.escapeRegExp(OKR_CHECKINS_START)}([\\s\\S]*?)${this.escapeRegExp(OKR_CHECKINS_END)}`,
 			"gm",
@@ -693,17 +770,26 @@ export class FileParser {
 		let currentKrId = "";
 		let current: CheckIn | null = null;
 		for (const line of block.split(/\r?\n/)) {
+			if (!line.trim() || line.trim() === "暂无进度记录。") {
+				continue;
+			}
 			const heading = line.match(/^###\s+(O\d+-KR\d+)(?:\s+.*)?$/);
 			if (heading?.[1]) {
+				if (current) {
+					this.appendCheckIn(result, current);
+				}
 				currentKrId = heading[1];
 				current = null;
 				continue;
 			}
 
 			const entry = line.match(
-				/^- \*\*(\d{4}-\d{2}-\d{2})\*\*\s+(\d+)%\s+\(([+-]?\d+)\)\s+`([^`]+)`\s*$/,
+				/^[-*+]\s+\*\*(\d{4}-\d{2}-\d{2})\*\*\s+(\d+)%\s+\(([+-]?\d+)\)\s+`([^`]+)`\s*$/,
 			);
 			if (entry && currentKrId) {
+				if (current) {
+					this.appendCheckIn(result, current);
+				}
 				current = {
 					id: entry[4] ?? `${currentKrId}-${result.size + 1}`,
 					krId: currentKrId,
@@ -714,30 +800,34 @@ export class FileParser {
 					blocker: "",
 					recordedAt: `${entry[1] ?? ""}T00:00:00.000Z`,
 				};
-				this.appendCheckIn(result, current);
 				continue;
 			}
 
 			if (!current) {
-				continue;
+				throw new Error(`Unrecognized check-in content: ${line}`);
 			}
 
-			const recordedAt = line.match(/^[ ]{2}- recordedAt:\s*(.*)$/);
+			const recordedAt = line.match(/^[ \t]{2,}[-*+]\s+recordedAt:\s*(.*)$/);
 			if (recordedAt) {
 				current.recordedAt = this.decodeMarkdownValue(recordedAt[1] ?? "");
 				continue;
 			}
 
-			const note = line.match(/^[ ]{2}- note:\s*(.*)$/);
+			const note = line.match(/^[ \t]{2,}[-*+]\s+note:\s*(.*)$/);
 			if (note) {
 				current.note = this.decodeMarkdownValue(note[1] ?? "");
 				continue;
 			}
 
-			const blocker = line.match(/^[ ]{2}- blocker:\s*(.*)$/);
+			const blocker = line.match(/^[ \t]{2,}[-*+]\s+blocker:\s*(.*)$/);
 			if (blocker) {
 				current.blocker = this.decodeMarkdownValue(blocker[1] ?? "");
+				continue;
 			}
+			throw new Error(`Unrecognized check-in content: ${line}`);
+		}
+		if (current) {
+			this.appendCheckIn(result, current);
 		}
 	}
 
@@ -785,8 +875,8 @@ export class FileParser {
 		const duplicateIndex = existing.findIndex((item) => item.id === checkIn.id);
 		if (duplicateIndex === -1) {
 			existing.push(checkIn);
-		} else {
-			existing[duplicateIndex] = checkIn;
+		} else if (JSON.stringify(existing[duplicateIndex]) !== JSON.stringify(checkIn)) {
+			throw new Error(`Conflicting duplicate check-in ${checkIn.id}`);
 		}
 		checkInsByKrId.set(checkIn.krId, existing);
 	}

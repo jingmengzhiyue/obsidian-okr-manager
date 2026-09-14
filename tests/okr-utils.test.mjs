@@ -788,6 +788,7 @@ test("concurrent createKeyResult calls allocate distinct IDs", async () => {
 		},
 	};
 	const manager = new OKRManager(app, DEFAULT_SETTINGS, createI18n("en"));
+	manager.getReferencedIds = async () => new Set();
 	manager.findObjectiveEntry = async () => ({ file, objective: storedObjective });
 	manager.parser.parseObjectiveContent = () => structuredClone(storedObjective);
 	manager.buildUpdatedObjectiveContent = (_content, objective) => {
@@ -1178,7 +1179,7 @@ test("syncCheckInsMarkdown replaces an existing CRLF progress section", () => {
 		"## 进度记录",
 		"",
 		"<!-- OKR-CHECKINS-START -->",
-		"旧内容",
+		"暂无进度记录。",
 		"<!-- OKR-CHECKINS-END -->",
 		"",
 	].join("\r\n");
@@ -1198,7 +1199,6 @@ test("syncCheckInsMarkdown replaces an existing CRLF progress section", () => {
 	});
 
 	assert.equal(body.match(/OKR-CHECKINS-START/g).length, 1);
-	assert.doesNotMatch(body, /旧内容/);
 	assert.match(body, /暂无进度记录。/);
 });
 

@@ -120,7 +120,7 @@ export class ClosePeriodModal extends Modal {
 			const objectiveCheckbox = objectiveLabel.createEl("input", {
 				type: "checkbox",
 			});
-			objectiveCheckbox.checked = true;
+			objectiveCheckbox.checked = this.selectedObjectives.has(candidate.objective.id);
 			objectiveLabel.append(` ${candidate.objective.id} ${candidate.objective.title}`);
 			const childCheckboxes: HTMLInputElement[] = [];
 			for (const keyResult of candidate.keyResults) {
@@ -130,7 +130,8 @@ export class ClosePeriodModal extends Modal {
 				const checkbox = keyResultLabel.createEl("input", {
 					type: "checkbox",
 				});
-				checkbox.checked = true;
+				checkbox.checked = this.selectedKeyResults.has(keyResult.id);
+				checkbox.disabled = !objectiveCheckbox.checked;
 				checkbox.addEventListener("change", () => {
 					if (checkbox.checked) {
 						this.selectedKeyResults.add(keyResult.id);

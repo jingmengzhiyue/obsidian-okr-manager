@@ -20,6 +20,7 @@ export class PostponeObjectiveModal extends Modal {
 		private options: PostponeObjectiveModalOptions = {},
 	) {
 		super(app);
+		this.objective = { ...objective };
 		this.due = objective.due;
 	}
 
@@ -127,6 +128,7 @@ export class PostponeObjectiveModal extends Modal {
 					status: this.objective.status,
 					due: this.due,
 				},
+				this.objective,
 			);
 			new Notice(this.t("modals.postpone.saved", { due: updated.due }));
 			this.options.onComplete?.();

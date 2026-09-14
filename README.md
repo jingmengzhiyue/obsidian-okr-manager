@@ -5,10 +5,10 @@
 A local-first Obsidian plugin for planning weighted OKRs, monitoring execution health, recording check-ins, and running structured period reviews in Markdown.
 
 ![Obsidian](https://img.shields.io/badge/Obsidian-%3E%3D1.7.2-blueviolet)
-![Version](https://img.shields.io/badge/version-1.4.0-blue)
+![Version](https://img.shields.io/badge/version-1.4.1-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-[中文文档](./README.zh-CN.md) · [Release notes](./docs/releases/1.4.0.md) · [Features](#features) · [Quick start](#quick-start) · [Health model](#progress-and-health-model) · [Review workflows](#structured-review-workflows) · [Storage](#markdown-storage-model)
+[中文文档](./README.zh-CN.md) · [Release notes](./docs/releases/1.4.1.md) · [Features](#features) · [Quick start](#quick-start) · [Health model](#progress-and-health-model) · [Review workflows](#structured-review-workflows) · [Storage](#markdown-storage-model)
 
 </div>
 

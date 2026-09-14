@@ -14,7 +14,6 @@ export default tseslint.config(
 					allowDefaultProject: [
 						"eslint.config.*",
 						"manifest.json",
-						"tests/*.test.mjs",
 					],
 				},
 				tsconfigRootDir: import.meta.dirname,
@@ -23,6 +22,13 @@ export default tseslint.config(
 		},
 	},
 	...obsidianmd.configs.recommended,
+	{
+		files: ["package.json"],
+		rules: {
+			// The Vault test adapter uses the installed YAML parser; production uses Obsidian's API.
+			"depend/ban-dependencies": ["error", { allowed: ["js-yaml"] }],
+		},
+	},
 	{
 		files: ["tests/**/*.mjs"],
 		rules: {

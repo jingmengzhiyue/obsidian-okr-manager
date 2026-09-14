@@ -113,6 +113,7 @@ const messages: Record<SupportedLocale, Record<string, string>> = {
 		"errors.objectivePeriodMismatch":
 			"Objective period {actual} does not match folder period {expected}",
 		"errors.invalidKeyResultValues": "Invalid key result values",
+		"errors.editConflict": "The document changed while this editor was open ({fields}). Copy your pending edits, reopen the editor, and apply them again.",
 		"errors.invalidCheckInValues": "Invalid check-in values",
 		"errors.invalidPeriod": "Invalid OKR period: {period}",
 		"errors.objectiveExists": "Objective file already exists: {fileName}",
@@ -460,6 +461,7 @@ const messages: Record<SupportedLocale, Record<string, string>> = {
 		"errors.objectivePeriodMismatch":
 			"Objective 周期 {actual} 与所在文件夹周期 {expected} 不一致",
 		"errors.invalidKeyResultValues": "关键结果数值无效",
+		"errors.editConflict": "编辑期间文件已发生冲突修改（{fields}）。请先复制尚未保存的内容，再重新打开编辑窗口并应用修改。",
 		"errors.invalidCheckInValues": "进度记录数值无效",
 		"errors.invalidPeriod": "OKR 周期无效：{period}",
 		"errors.objectiveExists": "Objective 文件已存在：{fileName}",
