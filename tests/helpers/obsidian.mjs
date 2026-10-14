@@ -23,8 +23,11 @@ export class Element {
 		this.ownerDocument = { activeElement: null };
 		this.doc = this.ownerDocument;
 		this.classes = new Set();
+		const cls = typeof options === "string" ? options : options.cls ?? "";
+		cls.split(" ").filter(Boolean).forEach((name) => this.classes.add(name));
+		Object.assign(this, options.attr ?? {});
 	}
-	createEl(tag, options) { const child = new Element(tag, options); this.children.push(child); return child; }
+	createEl(tag, options) { const child = new Element(tag, options); child.parentElement = this; child.ownerDocument = this.ownerDocument; child.doc = this.doc; this.children.push(child); return child; }
 	createDiv(options) { return this.createEl("div", options); }
 	createSpan(options) { return this.createEl("span", options); }
 	empty() { this.children = []; }
@@ -34,6 +37,19 @@ export class Element {
 	toggleClass(name, enabled) { if (enabled) this.classes.add(name); else this.classes.delete(name); }
 	setAttribute(name, value) { this[name] = value; }
 	removeAttribute(name) { delete this[name]; }
+	getAttribute(name) { return this[name] ?? null; }
+	get tagName() { return this.tag.toUpperCase(); }
+	get classList() { return { contains: (name) => this.hasClass(name), add: (...names) => this.addClass(...names), remove: (name) => this.removeClass(name) }; }
+	querySelectorAll(selector) { return this.all().filter((child) => selector.split(",").some((part) => child.matches(part.trim()))); }
+	querySelector(selector) { return this.querySelectorAll(selector)[0] ?? null; }
+	matches(selector) {
+		const match = selector.match(/^([\w-]+)?(?:\.([\w-]+))?(?:\[([\w-]+)(?:=["']?([^"'\]]+)["']?)?\])?$/);
+		return !!match && (!match[1] || this.tag === match[1]) && (!match[2] || this.hasClass(match[2])) && (!match[3] || (match[4] === undefined ? this[match[3]] !== undefined : this[match[3]] === match[4]));
+	}
+	remove() { if (this.parentElement) this.parentElement.children = this.parentElement.children.filter((child) => child !== this); }
+	contains(element) { return this === element || this.all().includes(element); }
+	removeEventListener(name, listener) { this.events[name] = (this.events[name] ?? []).filter((item) => item !== listener); }
+	scrollIntoView() {}
 	setText(text) { this.text = text; }
 	addEventListener(name, listener) { (this.events[name] ??= []).push(listener); }
 	append() {}
@@ -42,10 +58,11 @@ export class Element {
 	all() { return this.children.flatMap((child) => [child, ...child.all()]); }
 }
 export class Modal {
-	constructor(app) { this.app = app; this.contentEl = new Element(); this.modalEl = new Element(); }
+	static instances = [];
+	constructor(app) { Modal.instances.push(this); this.app = app; this.modalEl = new Element(); this.contentEl = this.modalEl.createDiv(); this.scope = { register() {}, unregister() {} }; }
 	onOpen() {}
 	onClose() {}
 	open() { this.onOpen(); }
 	close() { this.onClose(); }
 }
-export class Notice { constructor(message) { this.message = message; } }
+export class Notice { static messages = []; constructor(message) { this.message = message; Notice.messages.push(message); } }

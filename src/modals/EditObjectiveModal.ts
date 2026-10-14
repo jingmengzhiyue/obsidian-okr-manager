@@ -2,12 +2,15 @@ import { App, Modal, Notice } from "obsidian";
 import { type TranslationValue } from "../i18n";
 import { OKRManager } from "../manager/OKRManager";
 import { KeyResult, Objective } from "../types";
+import { parseLocalDate } from "../utils/date";
 import { ConfirmModal } from "./ConfirmModal";
 import { EditKRModal } from "./EditKRModal";
 
 interface EditObjectiveModalOptions {
-	onComplete?: () => void;
+	onComplete?: () => void | Promise<void>;
 }
+
+let nextEditObjectiveId = 0;
 
 export class EditObjectiveModal extends Modal {
 	private titleValue: string;
@@ -18,6 +21,12 @@ export class EditObjectiveModal extends Modal {
 	private keyResults: KeyResult[];
 	private keyResultsContainer: HTMLElement | null = null;
 	private isSubmitting = false;
+	private saved = false;
+	private opened = false;
+	private lifecycle = 0;
+	private refreshRequest = 0;
+	private keyResultControls: HTMLButtonElement[] = [];
+	private controls: (HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | HTMLButtonElement)[] = [];
 	private validate!: () => void;
 
 	constructor(
@@ -37,7 +46,11 @@ export class EditObjectiveModal extends Modal {
 	}
 
 	onOpen(): void {
+		if (this.isSubmitting || this.saved) return;
 		void super.onOpen();
+		this.opened = true;
+		this.lifecycle++;
+		this.controls = [];
 		const { contentEl } = this;
 		contentEl.empty();
 		this.modalEl.addClass("okr-modal");
@@ -74,7 +87,7 @@ export class EditObjectiveModal extends Modal {
 		});
 
 		const ownerField = contentEl.createDiv("okr-field");
-		this.createRequiredLabel(ownerField, this.t("modals.fields.owner"));
+		ownerField.createEl("label", { cls: "okr-label", text: this.t("modals.fields.owner") });
 		const ownerInput = ownerField.createEl("input", {
 			cls: "okr-input",
 			type: "text",
@@ -121,10 +134,10 @@ export class EditObjectiveModal extends Modal {
 			type: "date",
 		});
 		dueInput.value = this.due;
-		dueInput.addEventListener("change", () => {
-			this.due = dueInput.value;
-			this.validate();
-		});
+		const updateDue = () => { this.due = dueInput.value; this.validate(); };
+		dueInput.addEventListener("input", updateDue);
+		dueInput.addEventListener("change", updateDue);
+		const dueHint = dueField.createDiv({ cls: "okr-input-hint" });
 
 		const descField = contentEl.createDiv("okr-field");
 		descField.createEl("label", {
@@ -145,6 +158,7 @@ export class EditObjectiveModal extends Modal {
 		const cancelBtn = footer.createEl("button", {
 			cls: "okr-btn-cancel",
 			text: this.t("actions.cancel"),
+			attr: { type: "button" },
 		});
 		cancelBtn.addEventListener("click", () => this.close());
 
@@ -157,27 +171,49 @@ export class EditObjectiveModal extends Modal {
 			void this.submit();
 		});
 
+		const fields = [[titleField,titleInput],[ownerField,ownerInput],[statusField,statusSelect],[dueField,dueInput],[descField,descInput]] as const;
+		for (const [field,control] of fields) {
+			const id = `okr-edit-objective-${++nextEditObjectiveId}`;
+			control.id = id;
+			field.querySelector("label")?.setAttribute("for",id);
+		}
+		dueHint.id = `${dueInput.id}-error`;
+		dueInput.setAttribute("aria-describedby",dueHint.id);
+		this.controls.push(titleInput,ownerInput,statusSelect,dueInput,descInput,cancelBtn);
 		this.validate = () => {
+			this.due = dueInput.value;
+			const validDate = parseLocalDate(this.due) !== null;
+			dueInput.setAttribute("aria-invalid",String(!validDate));
+			dueHint.setText(validDate ? "" : this.t("modals.postpone.invalidDate"));
+			for (const control of [...this.controls, ...this.keyResultControls]) control.disabled = this.isSubmitting || this.saved;
+			confirmBtn.setText(this.t(this.isSubmitting ? "modals.common.saving" : "actions.save"));
 			confirmBtn.disabled =
-				this.isSubmitting ||
-				this.titleValue.length === 0 ||
-				this.owner.length === 0 ||
-				this.due.length === 0;
+				this.isSubmitting || this.saved ||
+				this.titleValue.length === 0 || !validDate;
 		};
 		this.validate();
 	}
 
+	close(): void { if (!this.isSubmitting) super.close(); }
+
 	onClose(): void {
+		this.opened = false;
+		this.lifecycle++;
+		this.keyResultsContainer = null;
+		this.keyResultControls = [];
+		this.refreshRequest++;
 		super.onClose();
 		this.contentEl.empty();
 	}
 
 	private async submit(): Promise<void> {
+		if (!this.opened || this.isSubmitting || this.saved) return;
 		this.validate();
-		if (this.isSubmitting || !this.titleValue || !this.owner || !this.due) {
+		if (!this.titleValue || !parseLocalDate(this.due)) {
 			return;
 		}
 
+		const lifecycle = this.lifecycle;
 		this.isSubmitting = true;
 		this.validate();
 		try {
@@ -194,8 +230,9 @@ export class EditObjectiveModal extends Modal {
 				this.objective,
 			);
 			new Notice(this.t("modals.updateObjective.saved", { title: updated.title }));
-			this.options.onComplete?.();
-			this.close();
+			this.saved = true;
+			try { await this.options.onComplete?.(); }
+			catch { new Notice(this.t("modals.common.savedFollowupFailed")); }
 		} catch (error) {
 			new Notice(
 				error instanceof Error
@@ -206,7 +243,10 @@ export class EditObjectiveModal extends Modal {
 			);
 		} finally {
 			this.isSubmitting = false;
-			this.validate();
+			if (this.opened && lifecycle === this.lifecycle) {
+				this.validate();
+				if (this.saved) this.close();
+			}
 		}
 	}
 
@@ -222,6 +262,7 @@ export class EditObjectiveModal extends Modal {
 			cls: "okr-label",
 			text: this.t("template.keyResultsHeading"),
 		});
+		section.createDiv({ cls: "okr-input-hint", text: this.t("modals.editObjective.krImmediateSave") });
 		this.keyResultsContainer = section.createDiv("okr-edit-obj-kr-list");
 		this.renderKeyResults();
 	}
@@ -231,6 +272,7 @@ export class EditObjectiveModal extends Modal {
 			return;
 		}
 		this.keyResultsContainer.empty();
+		this.keyResultControls = [];
 		if (this.keyResults.length === 0) {
 			this.keyResultsContainer.createDiv({
 				cls: "okr-edit-obj-kr-empty",
@@ -259,10 +301,14 @@ export class EditObjectiveModal extends Modal {
 			text: this.t("actions.edit"),
 		});
 		editButton.setAttribute("type", "button");
+		this.keyResultControls.push(editButton);
+		editButton.disabled = this.isSubmitting || this.saved;
 		editButton.addEventListener("click", () => {
+			if (!this.opened || this.isSubmitting || this.saved) return;
+			const lifecycle = this.lifecycle;
 			new EditKRModal(this.app, this.manager, keyResult, {
-				onComplete: () => {
-					void this.refreshKeyResults();
+				onComplete: async () => {
+					if (this.opened && lifecycle === this.lifecycle) await this.refreshKeyResults();
 				},
 			}).open();
 		});
@@ -272,12 +318,16 @@ export class EditObjectiveModal extends Modal {
 			text: this.t("actions.delete"),
 		});
 		deleteButton.setAttribute("type", "button");
+		this.keyResultControls.push(deleteButton);
+		deleteButton.disabled = this.isSubmitting || this.saved;
 		deleteButton.addEventListener("click", () => {
+			if (!this.opened || this.isSubmitting || this.saved) return;
+			const lifecycle = this.lifecycle;
 			new ConfirmModal(this.app, {
 				title: `${this.t("actions.delete")} ${keyResult.id}`,
 				message: this.t("detail.deleteKeyResultConfirm", {
 					title: keyResult.title,
-				}),
+				}) + " " + this.t("modals.editObjective.deleteImmediate"),
 				confirmText: this.t("actions.delete"),
 				errorNotice: this.t("detail.deleteKeyResultFailed", {
 					title: keyResult.title,
@@ -292,21 +342,26 @@ export class EditObjectiveModal extends Modal {
 							title: keyResult.title,
 						}),
 					);
-					await this.refreshKeyResults();
+					if (this.opened && lifecycle === this.lifecycle) await this.refreshKeyResults();
 				},
 			}).open();
 		});
 	}
 
 	private async refreshKeyResults(): Promise<void> {
+		if (!this.opened) return;
+		const lifecycle = this.lifecycle;
+		const request = ++this.refreshRequest;
 		try {
 			const refreshed = await this.manager.getKeyResultSummaries(
 				this.objective.id,
 				this.objective.period,
 			);
+			if (!this.opened || lifecycle !== this.lifecycle || request !== this.refreshRequest) return;
 			this.keyResults = refreshed;
 			this.renderKeyResults();
 		} catch (error) {
+			if (!this.opened || lifecycle !== this.lifecycle || request !== this.refreshRequest) return;
 			new Notice(
 				this.t("dashboard.loadFailedWithReason", {
 					message:

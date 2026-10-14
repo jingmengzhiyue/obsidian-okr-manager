@@ -8,61 +8,76 @@ import type {
 } from "../types";
 import { ConfirmModal } from "./ConfirmModal";
 import { ReviewEditorModal } from "./ReviewEditorModal";
+import { associateFields } from "../utils/form";
 
 export class PeriodReviewsModal extends Modal {
 	private period = "";
 	private periodInfo: OKRPeriodInfo | null = null;
 	private reviews: PeriodReviewSummary[] = [];
+	private active = false;
+	private loading = false;
+	private request = 0;
+	private generation = 0;
+	private loadError = "";
+	private periodInfos: OKRPeriodInfo[] = [];
 
 	constructor(
 		app: App,
 		private manager: OKRManager,
 		initialPeriod = "",
-		private onComplete?: () => void,
+		private onComplete?: () => void | Promise<void>,
 	) {
 		super(app);
 		this.period = initialPeriod;
 	}
 
 	onOpen(): void {
+		this.active = true;
+		this.generation++;
 		void super.onOpen();
 		this.modalEl.addClass("okr-modal", "okr-period-reviews-modal");
 		void this.load();
 	}
 
 	onClose(): void {
+		this.active = false;
+		this.generation++;
+		this.request++;
 		super.onClose();
 		this.contentEl.empty();
 	}
 
 	private async load(): Promise<void> {
-		this.contentEl.empty();
-		this.contentEl.createEl("h2", {
-			cls: "okr-modal-title",
-			text: this.t("modals.reviews.title"),
-		});
-		this.contentEl.createDiv({ text: this.t("common.loading") });
-		try {
-			const infos = await this.manager.getPeriodInfos({ includeArchived: true });
-			if (!this.period || !infos.some((info) => info.period === this.period)) {
-				this.period = infos[infos.length - 1]?.period ?? "";
-			}
-			await this.loadPeriodData(infos);
-		} catch (error) {
-			new Notice(error instanceof Error ? error.message : this.t("errors.unknown"));
-			this.close();
-		}
+		await this.loadPeriodData();
 	}
 
 	private async loadPeriodData(infos?: OKRPeriodInfo[]): Promise<void> {
-		const periodInfos =
-			infos ?? (await this.manager.getPeriodInfos({ includeArchived: true }));
-		this.periodInfo =
-			periodInfos.find((info) => info.period === this.period) ?? null;
-		this.reviews = this.period
-			? await this.manager.listPeriodReviews(this.period)
-			: [];
-		this.render(periodInfos);
+		const request = ++this.request;
+		const generation = this.generation;
+		let period = this.period;
+		const current = (): boolean => this.active && request === this.request && generation === this.generation;
+		this.loading = true;
+		this.loadError = "";
+		this.reviews = [];
+		this.periodInfo = null;
+		if (this.active) this.render(infos ?? this.periodInfos);
+		try {
+			const periodInfos = infos ?? await this.manager.getPeriodInfos({ includeArchived: true });
+			if (!current()) return;
+			if (!period) period = periodInfos[periodInfos.length - 1]?.period ?? "";
+			const periodInfo = periodInfos.find(info => info.period === period) ?? null;
+			const reviews = periodInfo ? await this.manager.listPeriodReviews(period) : [];
+			if (!current()) return;
+			this.period = period;
+			this.periodInfos = periodInfos;
+			this.periodInfo = periodInfo;
+			this.reviews = reviews;
+		} catch (error) {
+			if (!current()) return;
+			this.loadError = error instanceof Error ? error.message : this.t("errors.unknown");
+		} finally {
+			if (current()) { this.loading = false; this.render(this.periodInfos); }
+		}
 	}
 
 	private render(periodInfos: OKRPeriodInfo[]): void {
@@ -93,6 +108,17 @@ export class PeriodReviewsModal extends Modal {
 			this.period = periodSelect.value;
 			void this.loadPeriodData(periodInfos);
 		});
+		associateFields(this.contentEl);
+		if (this.loading) {
+			this.contentEl.createEl("p", { text: this.t("common.loading") });
+			return;
+		}
+		if (this.loadError) {
+			this.contentEl.createEl("p", { text: this.loadError, attr: { role: "alert" } });
+			const retry = this.contentEl.createEl("button", { text: this.t("actions.retry"), attr: { type: "button" } });
+			retry.addEventListener("click", () => { void this.loadPeriodData(); });
+			return;
+		}
 
 		if (this.periodInfo?.status === "open") {
 			this.renderCreateActions();
@@ -110,6 +136,7 @@ export class PeriodReviewsModal extends Modal {
 		for (const review of this.reviews) {
 			this.renderReviewRow(list, review);
 		}
+		associateFields(this.contentEl);
 	}
 
 	private renderCreateActions(): void {
@@ -161,50 +188,67 @@ export class PeriodReviewsModal extends Modal {
 			text: this.t("actions.delete"),
 		});
 		remove.addEventListener("click", () => {
+			if (!this.active || this.loading) return;
+			const generation = this.generation;
 			new ConfirmModal(this.app, {
 				title: this.t("modals.reviews.deleteTitle"),
 				message: this.t("modals.reviews.deleteConfirm"),
 				confirmText: this.t("actions.delete"),
 				onConfirm: async () => {
-					await this.manager.deletePeriodReview(this.period, review.id);
+					if (!this.active || generation !== this.generation) return;
+					await this.manager.deletePeriodReview(review.period, review.id);
 					new Notice(this.t("notices.reviewDeleted"));
-					this.onComplete?.();
-					await this.loadPeriodData();
+					try { await this.onComplete?.(); }
+					catch { new Notice(this.t("modals.savedFollowUpFailed")); }
+					if (this.active && generation === this.generation) await this.loadPeriodData();
 				},
 			}).open();
 		});
 	}
 
 	private openEditor(type: PeriodReviewType, review?: PeriodReview): void {
+		if (!this.active || this.loading) return;
+		const generation = this.generation;
 		new ReviewEditorModal(
 			this.app,
 			this.manager,
-			this.period,
+			review?.period ?? this.period,
 			type,
 			review,
-			() => {
-				this.onComplete?.();
-				void this.loadPeriodData();
+			async () => {
+				if (!this.active || generation !== this.generation) return;
+				await this.onComplete?.();
+				if (this.active && generation === this.generation) await this.loadPeriodData();
 			},
 		).open();
 	}
 
 	private async editReview(summary: PeriodReviewSummary): Promise<void> {
-		const review = await this.manager.getPeriodReview(this.period, summary.id);
+		if (!this.active || this.loading) return;
+		const request = this.request, generation = this.generation;
+		try {
+		const review = await this.manager.getPeriodReview(summary.period, summary.id);
+		if (!this.active || request !== this.request || generation !== this.generation) return;
 		if (!review) {
 			new Notice(this.t("errors.reviewNotFound", { id: summary.id }));
 			return;
 		}
 		this.openEditor(review.type, review);
+		} catch (error) {
+			if (this.active && request === this.request && generation === this.generation) new Notice(error instanceof Error ? error.message : this.t("errors.unknown"));
+		}
 	}
 
 	private async openFile(path: string): Promise<void> {
+		if (!this.active || this.loading) return;
+		try {
 		const file = this.app.vault.getAbstractFileByPath(path);
 		if (!(file instanceof TFile)) {
 			new Notice(this.t("errors.reviewFileMissing", { path }));
 			return;
 		}
 		await this.app.workspace.getLeaf().openFile(file);
+		} catch (error) { new Notice(error instanceof Error ? error.message : this.t("errors.unknown")); }
 	}
 
 	private t(key: string, values?: Record<string, string | number>): string {

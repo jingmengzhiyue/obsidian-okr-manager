@@ -1,18 +1,15 @@
 import { App, Modal, Notice, TFile } from "obsidian";
 import { type TranslationValue } from "../i18n";
 import { OKRManager } from "../manager/OKRManager";
-import { Confidence } from "../types";
-import { getTodayLocalDate } from "../utils/date";
-import { getElementDocument, isActiveElement } from "../utils/document";
-import {
-	isValidKeyResultValues,
-	isValidKeyResultWeight,
-} from "../utils/validation";
+import { Confidence, Objective, KeyResult } from "../types";
+import { getTodayLocalDate, parseLocalDate } from "../utils/date";
+import { parseKRNumbers } from "../utils/krForm";
+import { associateFields, setFieldError } from "../utils/form";
 
 interface NewKRModalOptions {
 	initialPeriod?: string;
 	initialObjectiveId?: string;
-	onComplete?: () => void;
+	onComplete?: () => void | Promise<void>;
 }
 
 export class NewKRModal extends Modal {
@@ -27,8 +24,20 @@ export class NewKRModal extends Modal {
 	private confidence: Confidence = "medium";
 	private due: string = "";
 	private description: string = "";
-	private objectives: { id: string; title: string }[] = [];
+	private objectives: Objective[] = [];
+	private loading = false;
+	private loadedPeriod = "";
+	private request = 0;
+	private ownerEdited = false;
+	private dueEdited = false;
+	private inheritFields: (() => void) | undefined;
+	private loadMessage: HTMLElement | undefined;
+	private periodSelect: HTMLSelectElement | undefined;
 	private isSubmitting = false;
+	private saved = false;
+	private active = false;
+	private generation = 0;
+	private restoreControls: (() => void) | undefined;
 	private validate!: () => boolean;
 
 	constructor(
@@ -40,12 +49,35 @@ export class NewKRModal extends Modal {
 	}
 
 	async onOpen(): Promise<void> {
+		if (this.isSubmitting || this.saved) {
+			return;
+		}
+		this.active = true;
+		const opening = ++this.generation;
 		await super.onOpen();
+		if (!this.active || opening !== this.generation) {
+			return;
+		}
 		const { contentEl } = this;
-		const modalDoc = getElementDocument(this.modalEl);
 		contentEl.empty();
 		this.modalEl.addClass("okr-modal");
+		this.saved = false;
+		this.objectiveId = "";
+		this.objectives = [];
+		this.loadedPeriod = "";
+		this.title = "";
+		this.owner = "";
+		this.description = "";
+		this.unit = "score";
+		this.weight = 1;
+		this.current = 0;
+		this.target = 0;
+		this.confidence = "medium";
+		this.loading = false;
 
+		const lifecycle = this.generation;
+		this.ownerEdited = false;
+		this.dueEdited = false;
 		const today = getTodayLocalDate();
 		this.period =
 			this.options.initialPeriod ||
@@ -55,18 +87,34 @@ export class NewKRModal extends Modal {
 		this.due = today;
 
 		let allPeriods: string[] = [];
+		contentEl.createDiv({ text: this.t("modals.loading") });
 		try {
 			allPeriods = await this.manager.getWritablePeriods();
-			if (!allPeriods.includes(this.period)) {
+			if (!this.active || this.generation !== lifecycle) {
+				return;
+			}
+			if (!allPeriods.includes(this.period) && !this.options.initialPeriod && !this.options.initialObjectiveId) {
 				this.period = allPeriods[allPeriods.length - 1] ?? "";
 			}
-			if (this.period) {
-				await this.loadObjectives();
+			if (this.period && allPeriods.includes(this.period)) {
+				const objectives = await this.manager.getObjectiveSummaries(this.period);
+				if (!this.active || this.generation !== lifecycle) {
+					return;
+				}
+				this.objectives = objectives;
+				this.loadedPeriod = this.period;
 			}
 		} catch (error) {
+			if (!this.active || this.generation !== lifecycle) {
+				return;
+			}
 			this.objectives = [];
 			this.showLoadError(error);
 		}
+		if (!this.active || this.generation !== lifecycle) {
+			return;
+		}
+		contentEl.empty();
 		if (
 			this.options.initialObjectiveId &&
 			this.objectives.some(
@@ -74,7 +122,7 @@ export class NewKRModal extends Modal {
 			)
 		) {
 			this.objectiveId = this.options.initialObjectiveId;
-		} else if (this.objectives.length > 0) {
+		} else if (!this.options.initialObjectiveId && this.objectives.length > 0) {
 			this.objectiveId = this.objectives[0]?.id ?? "";
 		}
 
@@ -88,6 +136,7 @@ export class NewKRModal extends Modal {
 		const periodSelect = periodField.createEl("select", {
 			cls: "okr-select",
 		});
+		this.periodSelect = periodSelect;
 		if (allPeriods.length === 0) {
 			periodSelect.createEl("option", {
 				text: this.t("dashboard.noPeriods"),
@@ -115,6 +164,7 @@ export class NewKRModal extends Modal {
 		objSelect.value = this.objectiveId;
 		objSelect.addEventListener("change", () => {
 			this.objectiveId = objSelect.value;
+			this.inheritFields?.();
 			this.validate();
 		});
 
@@ -131,16 +181,21 @@ export class NewKRModal extends Modal {
 		});
 
 		const ownerField = contentEl.createDiv("okr-field");
-		this.createRequiredLabel(ownerField, this.t("modals.fields.owner"));
+		ownerField.createEl("label", {
+			cls: "okr-label",
+			text: this.t("modals.fields.owner"),
+		});
 		const ownerInput = ownerField.createEl("input", {
 			cls: "okr-input",
 			type: "text",
 		});
 		ownerInput.addEventListener("input", () => {
+			this.ownerEdited = true;
 			this.owner = ownerInput.value.trim();
 			this.validate();
 		});
 
+		let targetEdited = false;
 		const unitField = contentEl.createDiv("okr-field");
 		unitField.createEl("label", {
 			cls: "okr-label",
@@ -165,7 +220,10 @@ export class NewKRModal extends Modal {
 		});
 		unitSelect.value = this.unit;
 		unitSelect.addEventListener("change", () => {
-			this.unit = unitSelect.value as typeof this.unit;
+			this.unit = unitSelect.value as KeyResult["unit"];
+			if (this.unit === "boolean" && !targetEdited) {
+				targetInput.value = "1";
+			}
 			this.validate();
 		});
 
@@ -176,24 +234,13 @@ export class NewKRModal extends Modal {
 			type: "number",
 		});
 		weightInput.value = String(this.weight);
-		weightInput.setAttribute("min", "0.1");
-		weightInput.setAttribute("step", "0.1");
+		weightInput.setAttribute("min", "0");
+		weightInput.setAttribute("step", "any");
 		const weightError = weightField.createDiv({
 			cls: "okr-input-error",
 			text: this.t("modals.input.weightError"),
 		});
 		weightInput.addEventListener("input", () => {
-			const value = Number(weightInput.value);
-			const valid = isValidKeyResultWeight(value);
-			this.weight = valid ? value : 0;
-			weightInput.toggleClass(
-				"okr-invalid",
-				weightInput.value.length > 0 && !valid,
-			);
-			weightError.toggleClass(
-				"visible",
-				weightInput.value.length > 0 && !valid,
-			);
 			this.validate();
 		});
 
@@ -214,20 +261,6 @@ export class NewKRModal extends Modal {
 			text: this.t("modals.input.currentError"),
 		});
 		currentInput.addEventListener("input", () => {
-			const value = Number(currentInput.value);
-			const valid =
-				Number.isFinite(value) &&
-				value >= 0 &&
-				(this.unit !== "boolean" || value === 0 || value === 1);
-			this.current = valid ? value : 0;
-			currentInput.toggleClass(
-				"okr-invalid",
-				currentInput.value.length > 0 && !valid,
-			);
-			currentError.toggleClass(
-				"visible",
-				currentInput.value.length > 0 && !valid,
-			);
 			this.validate();
 		});
 
@@ -248,20 +281,7 @@ export class NewKRModal extends Modal {
 			text: this.t("modals.input.targetError"),
 		});
 		targetInput.addEventListener("input", () => {
-			const value = Number(targetInput.value);
-			const valid =
-				Number.isFinite(value) &&
-				value > 0 &&
-				(this.unit !== "boolean" || value === 1);
-			this.target = valid ? value : 0;
-			targetInput.toggleClass(
-				"okr-invalid",
-				targetInput.value.length > 0 && !valid,
-			);
-			targetError.toggleClass(
-				"visible",
-				targetInput.value.length > 0 && !valid,
-			);
+			targetEdited = true;
 			this.validate();
 		});
 
@@ -295,9 +315,55 @@ export class NewKRModal extends Modal {
 			type: "date",
 		});
 		dueInput.value = this.due;
-		dueInput.addEventListener("change", () => {
+		dueInput.addEventListener("input", () => {
+			this.dueEdited = true;
 			this.due = dueInput.value;
 			this.validate();
+		});
+		dueInput.addEventListener("change", () => {
+			this.dueEdited = true;
+			this.due = dueInput.value;
+			this.validate();
+		});
+
+		const inheritanceHint = dueField.createDiv({ cls: "okr-input-hint" });
+		this.inheritFields = () => {
+			const parent = this.objectives.find(objective => objective.id === this.objectiveId);
+			if (!parent) {
+				return;
+			}
+			if (!this.ownerEdited) {
+				this.owner = parent.owner ?? "";
+				ownerInput.value = this.owner;
+			}
+			if (!this.dueEdited) {
+				this.due = parseLocalDate(parent.due ?? "")
+					? parent.due
+					: this.manager.getParser().getDueForPeriod(
+						this.period,
+						this.manager.getParser().inferPeriodType(this.period),
+					) ?? "";
+				dueInput.value = this.due;
+			}
+			inheritanceHint.setText(
+				!parseLocalDate(parent.due ?? "")
+					? this.t("modals.newKeyResult.fallbackDue")
+					: this.due < getTodayLocalDate()
+						? this.t("modals.newKeyResult.pastDue")
+						: "",
+			);
+		};
+		this.inheritFields();
+		this.loadMessage = objField.createDiv({ cls: "okr-input-hint" });
+		if (!this.objectiveId) {
+			this.loadMessage.setText(this.t("modals.newKeyResult.invalidContext"));
+		}
+		const retry = objField.createEl("button", {
+			text: this.t("actions.retry"),
+			attr: { type: "button" },
+		});
+		retry.addEventListener("click", () => {
+			void this.handlePeriodChange(this.period, objSelect, this.options.initialObjectiveId);
 		});
 
 		const descField = contentEl.createDiv("okr-field");
@@ -329,51 +395,71 @@ export class NewKRModal extends Modal {
 			void this.submit();
 		});
 
+		const dueError = dueField.createDiv({
+			cls: "okr-input-error",
+			text: this.t("modals.input.dateError"),
+		});
 		this.validate = () => {
-			const numericValuesValid = isValidKeyResultValues(
+			if (!this.active) {
+				return false;
+			}
+			currentInput.setAttribute("step", this.unit === "boolean" ? "1" : "any");
+			targetInput.setAttribute("step", this.unit === "boolean" ? "1" : "any");
+			if (this.unit === "boolean") {
+				currentInput.setAttribute("max", "1");
+				targetInput.setAttribute("min", "1");
+				targetInput.setAttribute("max", "1");
+			} else {
+				currentInput.removeAttribute("max");
+				targetInput.setAttribute("min", "0");
+				targetInput.removeAttribute("max");
+			}
+			const numbers = parseKRNumbers(
 				this.unit,
-				this.current,
-				this.target,
+				currentInput.value,
+				targetInput.value,
+				weightInput.value,
 			);
-			const valid =
+			if (currentInput.validity?.badInput) {
+				numbers.currentValid = false;
+				numbers.valid = false;
+			}
+			this.current = numbers.current;
+			this.target = numbers.target;
+			this.weight = numbers.weight;
+			this.due = dueInput.value;
+			currentError.setText(this.t(this.unit === "boolean" ? "modals.input.booleanCurrentError" : "modals.input.currentError"));
+			targetError.setText(this.t(this.unit === "boolean" ? "modals.input.booleanTargetError" : "modals.input.targetError"));
+			setFieldError(currentInput, currentError, numbers.currentValid);
+			setFieldError(targetInput, targetError, numbers.targetValid);
+			setFieldError(weightInput, weightError, numbers.weightValid);
+			setFieldError(dueInput, dueError, !!parseLocalDate(this.due));
+			const valid = this.active &&
+				!this.saved &&
 				!this.isSubmitting &&
 				this.period.length > 0 &&
 				this.objectiveId.length > 0 &&
+				!this.loading &&
+				this.loadedPeriod === this.period &&
+				this.objectives.some(o => o.id === this.objectiveId) &&
 				this.title.length > 0 &&
-				this.owner.length > 0 &&
-				this.due.length > 0 &&
-				targetInput.value.length > 0 &&
-				weightInput.value.length > 0 &&
-				numericValuesValid &&
-				isValidKeyResultWeight(this.weight) &&
-				!targetInput.hasClass("okr-invalid") &&
-				!currentInput.hasClass("okr-invalid") &&
-				!weightInput.hasClass("okr-invalid");
+				!!parseLocalDate(this.due) &&
+				numbers.valid;
 			confirmBtn.disabled = !valid;
 			return valid;
 		};
+		associateFields(contentEl);
 		this.validate();
 
-		this.modalEl.addEventListener("keydown", (e) => {
-			if (e.key === "Escape") {
-				this.close();
-				return;
-			}
-
-			if (e.key === "Enter" && !isActiveElement(descInput, modalDoc)) {
-				e.preventDefault();
-				void this.submit();
-			}
-		});
 	}
 
 	private async submit(): Promise<void> {
-		if (this.isSubmitting || !this.validate()) {
+		if (!this.active || this.saved || this.isSubmitting || !this.validate()) {
 			return;
 		}
 
 		this.isSubmitting = true;
-		this.validate();
+		this.setBusy(true);
 		try {
 			const today = getTodayLocalDate();
 			const kr = await this.manager.createKeyResult({
@@ -392,19 +478,32 @@ export class NewKRModal extends Modal {
 				due: this.due,
 			});
 
-			const file = this.app.vault.getAbstractFileByPath(kr.filePath);
-			if (file instanceof TFile) {
-				await this.app.workspace.openLinkText(file.path, "", false);
+			this.saved = true;
+			new Notice(this.t("modals.newKeyResult.created", { title: kr.title }));
+			let followUpFailed = false;
+			if (this.active) {
+				try {
+					const file = this.app.vault.getAbstractFileByPath(kr.filePath);
+					if (file instanceof TFile) {
+						await this.app.workspace.openLinkText(file.path, "", false);
+					}
+				} catch {
+					followUpFailed = true;
+				}
 			}
-
-			new Notice(
-				this.t("modals.newKeyResult.created", { title: kr.title }),
-			);
-			this.options.onComplete?.();
-			this.close();
+			if (this.active) {
+				try {
+					await this.options.onComplete?.();
+				} catch {
+					followUpFailed = true;
+				}
+			}
+			if (followUpFailed) {
+				new Notice(this.t("modals.savedFollowUpFailed"));
+			}
 		} catch (error) {
 			new Notice(
-				error instanceof Error
+				this.saved ? this.t("modals.savedFollowUpFailed") : error instanceof Error
 					? this.t("modals.newKeyResult.createFailedWithReason", {
 							message: error.message,
 						})
@@ -412,38 +511,85 @@ export class NewKRModal extends Modal {
 			);
 		} finally {
 			this.isSubmitting = false;
-			this.validate();
+			if (this.active) {
+				this.setBusy(false);
+				if (this.saved) {
+					this.close();
+				} else {
+					this.validate();
+				}
+			}
 		}
 	}
 
 	onClose(): void {
+		this.active = false;
+		this.generation++;
 		super.onClose();
 		const { contentEl } = this;
 		contentEl.empty();
 	}
 
-	private async loadObjectives(): Promise<void> {
-		const objectives = await this.manager.getObjectiveSummaries(this.period);
-		this.objectives = objectives.map((objective) => ({
-			id: objective.id,
-			title: `${objective.id} ${objective.title}`,
-		}));
-	}
-
 	private async handlePeriodChange(
 		period: string,
 		select: HTMLSelectElement,
+		requestedId?: string,
 	): Promise<void> {
+		const request = ++this.request;
+		const lifecycle = this.generation;
 		this.period = period;
-		try {
-			await this.loadObjectives();
-		} catch (error) {
-			this.objectives = [];
-			this.showLoadError(error);
-		}
-		this.objectiveId = this.objectives[0]?.id ?? "";
+		this.loadedPeriod = "";
+		this.loading = true;
+		this.objectiveId = "";
+		this.objectives = [];
 		this.renderObjectiveOptions(select);
 		this.validate();
+		this.loadMessage?.setText(this.t("modals.loading"));
+		const current = () => this.active && lifecycle === this.generation && request === this.request;
+		try {
+			const writable = await this.manager.getWritablePeriods();
+			if (!current()) {
+				return;
+			}
+			if (this.periodSelect) {
+				this.periodSelect.empty();
+				for (const value of writable) {
+					this.periodSelect.createEl("option", {
+						value,
+						text: this.manager.getParser().formatPeriodLabel(value, undefined, this.manager.getI18n()),
+					});
+				}
+				this.periodSelect.value = period;
+				this.periodSelect.disabled = writable.length === 0;
+			}
+			if (!writable.includes(period)) {
+				throw new Error(this.t("modals.newKeyResult.invalidContext"));
+			}
+			const objectives = await this.manager.getObjectiveSummaries(period);
+			if (!current()) {
+				return;
+			}
+			this.objectives = objectives;
+			this.loadedPeriod = period;
+			this.objectiveId = requestedId ? (objectives.some(o => o.id === requestedId) ? requestedId : "") : objectives[0]?.id ?? "";
+			this.loadMessage?.setText(this.objectiveId ? "" : this.t("modals.newKeyResult.invalidContext"));
+			this.inheritFields?.();
+		} catch (error) {
+			if (!current()) {
+				return;
+			}
+			this.objectives = [];
+			this.objectiveId = "";
+			this.loadMessage?.setText(this.t("dashboard.loadFailedWithReason", {
+				message: error instanceof Error ? error.message : this.t("errors.unknown"),
+			}));
+		} finally {
+			if (current()) {
+				this.loading = false;
+				this.renderObjectiveOptions(select);
+				this.validate();
+			}
+		}
 	}
 
 	private renderObjectiveOptions(select: HTMLSelectElement): void {
@@ -458,13 +604,55 @@ export class NewKRModal extends Modal {
 		}
 
 		select.disabled = false;
+		if (!this.objectiveId) {
+			select.createEl("option", {
+				text: this.t("modals.newKeyResult.invalidContext"),
+				value: "",
+			});
+		}
 		for (const objective of this.objectives) {
 			select.createEl("option", {
-				text: objective.title,
+				text: `${objective.id} ${objective.title}`,
 				value: objective.id,
 			});
 		}
 		select.value = this.objectiveId;
+	}
+
+	close(): void {
+		if (!this.isSubmitting) {
+			super.close();
+		}
+	}
+
+	private setBusy(busy: boolean): void {
+		if (!busy) {
+			this.restoreControls?.();
+			this.restoreControls = undefined;
+			return;
+		}
+		const controls = Array.from(
+			this.contentEl.querySelectorAll<HTMLInputElement | HTMLButtonElement | HTMLSelectElement | HTMLTextAreaElement>(
+				"input, button, select, textarea",
+			),
+		);
+		const states = controls.map(control => control.disabled);
+		const button = this.contentEl.querySelector<HTMLButtonElement>(".okr-btn-confirm");
+		const label = button?.textContent ?? "";
+		controls.forEach(control => {
+			control.disabled = true;
+		});
+		if (button) {
+			button.setText(this.t("actions.saving"));
+		}
+		this.restoreControls = () => {
+			controls.forEach((control, index) => {
+				control.disabled = states[index] ?? false;
+			});
+			if (button) {
+				button.setText(label);
+			}
+		};
 	}
 
 	private createRequiredLabel(container: HTMLElement, text: string): void {

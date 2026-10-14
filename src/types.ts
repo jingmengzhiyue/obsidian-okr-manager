@@ -94,6 +94,11 @@ export interface CheckIn {
 	recordedAt: string;
 }
 
+/** Optional, unsaved results whose identity and dates belong to a new Objective. */
+export type InitialKeyResult = Pick<KeyResult,
+	"title" | "description" | "owner" | "unit" | "weight" | "current" | "target" | "confidence" | "due"
+>;
+
 export interface RolloverMapping {
 	sourceObjectiveId: string;
 	sourceKeyResultIds: string[];

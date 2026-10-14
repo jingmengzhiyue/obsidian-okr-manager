@@ -1,14 +1,13 @@
 import { App, Modal, Notice } from "obsidian";
 import { type TranslationValue } from "../i18n";
 import { OKRManager } from "../manager/OKRManager";
+import { parseLocalDate } from "../utils/date";
 import { Confidence, KeyResult } from "../types";
-import {
-	isValidKeyResultValues,
-	isValidKeyResultWeight,
-} from "../utils/validation";
+import { parseKRNumbers } from "../utils/krForm";
+import { associateFields, setFieldError } from "../utils/form";
 
 interface EditKRModalOptions {
-	onComplete?: () => void;
+	onComplete?: () => void | Promise<void>;
 }
 
 export class EditKRModal extends Modal {
@@ -23,6 +22,10 @@ export class EditKRModal extends Modal {
 	private description: string;
 	private status: KeyResult["status"];
 	private isSubmitting = false;
+	private saved = false;
+	private active = false;
+	private generation = 0;
+	private restoreControls: (() => void) | undefined;
 	private validate!: () => boolean;
 
 	constructor(
@@ -46,10 +49,16 @@ export class EditKRModal extends Modal {
 	}
 
 	onOpen(): void {
+		if (this.isSubmitting || this.saved) {
+			return;
+		}
 		void super.onOpen();
 		const { contentEl } = this;
 		contentEl.empty();
 		this.modalEl.addClass("okr-modal");
+		this.active = true;
+		this.generation++;
+		this.saved = false;
 
 		contentEl.createEl("h2", {
 			cls: "okr-modal-title",
@@ -77,7 +86,10 @@ export class EditKRModal extends Modal {
 		});
 
 		const ownerField = contentEl.createDiv("okr-field");
-		this.createRequiredLabel(ownerField, this.t("modals.fields.owner"));
+		ownerField.createEl("label", {
+			cls: "okr-label",
+			text: this.t("modals.fields.owner"),
+		});
 		const ownerInput = ownerField.createEl("input", {
 			cls: "okr-input",
 			type: "text",
@@ -152,24 +164,13 @@ export class EditKRModal extends Modal {
 			type: "number",
 		});
 		weightInput.value = String(this.weight);
-		weightInput.setAttribute("min", "0.1");
-		weightInput.setAttribute("step", "0.1");
+		weightInput.setAttribute("min", "0");
+		weightInput.setAttribute("step", "any");
 		const weightError = weightField.createDiv({
 			cls: "okr-input-error",
 			text: this.t("modals.input.weightError"),
 		});
 		weightInput.addEventListener("input", () => {
-			const value = Number(weightInput.value);
-			const valid = isValidKeyResultWeight(value);
-			this.weight = valid ? value : 0;
-			weightInput.toggleClass(
-				"okr-invalid",
-				weightInput.value.length > 0 && !valid,
-			);
-			weightError.toggleClass(
-				"visible",
-				weightInput.value.length > 0 && !valid,
-			);
 			this.validate();
 		});
 
@@ -190,20 +191,6 @@ export class EditKRModal extends Modal {
 			text: this.t("modals.input.currentError"),
 		});
 		currentInput.addEventListener("input", () => {
-			const value = Number(currentInput.value);
-			const valid =
-				Number.isFinite(value) &&
-				value >= 0 &&
-				(this.unit !== "boolean" || value === 0 || value === 1);
-			this.current = valid ? value : 0;
-			currentInput.toggleClass(
-				"okr-invalid",
-				currentInput.value.length > 0 && !valid,
-			);
-			currentError.toggleClass(
-				"visible",
-				currentInput.value.length > 0 && !valid,
-			);
 			this.validate();
 		});
 
@@ -221,20 +208,6 @@ export class EditKRModal extends Modal {
 			text: this.t("modals.input.targetError"),
 		});
 		targetInput.addEventListener("input", () => {
-			const value = Number(targetInput.value);
-			const valid =
-				Number.isFinite(value) &&
-				value > 0 &&
-				(this.unit !== "boolean" || value === 1);
-			this.target = valid ? value : 0;
-			targetInput.toggleClass(
-				"okr-invalid",
-				targetInput.value.length > 0 && !valid,
-			);
-			targetError.toggleClass(
-				"visible",
-				targetInput.value.length > 0 && !valid,
-			);
 			this.validate();
 		});
 
@@ -268,6 +241,10 @@ export class EditKRModal extends Modal {
 			type: "date",
 		});
 		dueInput.value = this.due;
+		dueInput.addEventListener("input", () => {
+			this.due = dueInput.value;
+			this.validate();
+		});
 		dueInput.addEventListener("change", () => {
 			this.due = dueInput.value;
 			this.validate();
@@ -302,38 +279,72 @@ export class EditKRModal extends Modal {
 			void this.submit();
 		});
 
+		const dueError = dueField.createDiv({
+			cls: "okr-input-error",
+			text: this.t("modals.input.dateError"),
+		});
 		this.validate = () => {
-			const valid = !(
-				this.isSubmitting ||
-				this.titleValue.length === 0 ||
-				this.owner.length === 0 ||
-				this.due.length === 0 ||
-				targetInput.value.length === 0 ||
-				weightInput.value.length === 0 ||
-				!isValidKeyResultValues(this.unit, this.current, this.target) ||
-				!isValidKeyResultWeight(this.weight) ||
-				targetInput.hasClass("okr-invalid") ||
-				currentInput.hasClass("okr-invalid") ||
-				weightInput.hasClass("okr-invalid")
+			if (!this.active) {
+				return false;
+			}
+			currentInput.setAttribute("step", this.unit === "boolean" ? "1" : "any");
+			targetInput.setAttribute("step", this.unit === "boolean" ? "1" : "any");
+			if (this.unit === "boolean") {
+				currentInput.setAttribute("max", "1");
+				targetInput.setAttribute("min", "1");
+				targetInput.setAttribute("max", "1");
+			} else {
+				currentInput.removeAttribute("max");
+				targetInput.setAttribute("min", "0");
+				targetInput.removeAttribute("max");
+			}
+			const numbers = parseKRNumbers(
+				this.unit,
+				currentInput.value,
+				targetInput.value,
+				weightInput.value,
 			);
+			if (currentInput.validity?.badInput) {
+				numbers.currentValid = false;
+				numbers.valid = false;
+			}
+			this.current = numbers.current;
+			this.target = numbers.target;
+			this.weight = numbers.weight;
+			this.due = dueInput.value;
+			currentError.setText(this.t(this.unit === "boolean" ? "modals.input.booleanCurrentError" : "modals.input.currentError"));
+			targetError.setText(this.t(this.unit === "boolean" ? "modals.input.booleanTargetError" : "modals.input.targetError"));
+			setFieldError(currentInput, currentError, numbers.currentValid);
+			setFieldError(targetInput, targetError, numbers.targetValid);
+			setFieldError(weightInput, weightError, numbers.weightValid);
+			setFieldError(dueInput, dueError, !!parseLocalDate(this.due));
+			const valid = this.active &&
+				!this.saved &&
+				!this.isSubmitting &&
+				 this.titleValue.length > 0 &&
+				!!parseLocalDate(this.due) &&
+				numbers.valid;
 			confirmBtn.disabled = !valid;
 			return valid;
 		};
+		associateFields(contentEl);
 		this.validate();
 	}
 
 	onClose(): void {
+		this.active = false;
+		this.generation++;
 		super.onClose();
 		this.contentEl.empty();
 	}
 
 	private async submit(): Promise<void> {
-		if (this.isSubmitting || !this.validate()) {
+		if (!this.active || this.saved || this.isSubmitting || !this.validate()) {
 			return;
 		}
 
 		this.isSubmitting = true;
-		this.validate();
+		this.setBusy(true);
 		try {
 			const updated = await this.manager.updateKeyResult(
 				this.keyResult.id,
@@ -352,16 +363,16 @@ export class EditKRModal extends Modal {
 				},
 				this.keyResult,
 			);
+			this.saved = true;
 			new Notice(
 				this.t("modals.updateKeyResult.saved", {
 					title: updated.title,
 				}),
 			);
-			this.options.onComplete?.();
-			this.close();
+			await this.options.onComplete?.();
 		} catch (error) {
 			new Notice(
-				error instanceof Error
+				this.saved ? this.t("modals.savedFollowUpFailed") : error instanceof Error
 					? this.t("modals.updateKeyResult.saveFailedWithReason", {
 							message: error.message,
 						})
@@ -369,8 +380,51 @@ export class EditKRModal extends Modal {
 			);
 		} finally {
 			this.isSubmitting = false;
-			this.validate();
+			if (this.active) {
+				this.setBusy(false);
+				if (this.saved) {
+					this.close();
+				} else {
+					this.validate();
+				}
+			}
 		}
+	}
+
+	close(): void {
+		if (!this.isSubmitting) {
+			super.close();
+		}
+	}
+
+	private setBusy(busy: boolean): void {
+		if (!busy) {
+			this.restoreControls?.();
+			this.restoreControls = undefined;
+			return;
+		}
+		const controls = Array.from(
+			this.contentEl.querySelectorAll<HTMLInputElement | HTMLButtonElement | HTMLSelectElement | HTMLTextAreaElement>(
+				"input, button, select, textarea",
+			),
+		);
+		const states = controls.map(control => control.disabled);
+		const button = this.contentEl.querySelector<HTMLButtonElement>(".okr-btn-confirm");
+		const label = button?.textContent ?? "";
+		controls.forEach(control => {
+			control.disabled = true;
+		});
+		if (button) {
+			button.setText(this.t("actions.saving"));
+		}
+		this.restoreControls = () => {
+			controls.forEach((control, index) => {
+				control.disabled = states[index] ?? false;
+			});
+			if (button) {
+				button.setText(label);
+			}
+		};
 	}
 
 	private createRequiredLabel(container: HTMLElement, text: string): void {

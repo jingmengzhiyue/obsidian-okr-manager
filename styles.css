@@ -1217,6 +1217,23 @@
 
 .okr-inline-kr-table { display: block; overflow-x: auto; }
 
+.okr-draft-list { display: flex; flex-direction: column; gap: 12px; }
+.okr-draft-card {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-primary);
+  min-width: 0;
+}
+.okr-draft-card > summary {
+  padding: 12px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.okr-draft-body { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 12px; }
+.okr-drafts > button { margin: 12px 0; }
+.okr-modal .okr-modal-footer { flex-wrap: wrap; }
+.okr-draft-card input, .okr-draft-card select, .okr-draft-card textarea { max-width: 100%; }
+
 @media (max-width: 480px) {
   .okr-review-row,
   .okr-review-required-warning {

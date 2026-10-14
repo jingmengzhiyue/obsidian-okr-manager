@@ -92,8 +92,8 @@ export class OKRDetailRenderer {
 				);
 			}
 
-			const rerenderCurrentPreview = (): void => {
-				void this.refreshPreview(manager, ctx.sourcePath);
+			const rerenderCurrentPreview = (): Promise<void> => {
+				return this.refreshPreview(manager, ctx.sourcePath);
 			};
 
 			el.querySelectorAll<HTMLButtonElement>(

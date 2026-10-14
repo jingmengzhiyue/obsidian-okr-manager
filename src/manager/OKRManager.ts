@@ -15,6 +15,7 @@ import {
 	ClosePeriodResult,
 	CreatePeriodReviewInput,
 	KeyResult,
+	InitialKeyResult,
 	Objective,
 	OKRPeriodInfo,
 	OKRPeriodType,
@@ -345,13 +346,29 @@ export class OKRManager {
 
 	async createObjective(
 		params: Omit<Objective, "id" | "progress" | "filePath" | "keyResults">,
+		initialKeyResults: InitialKeyResult[] = [],
 	): Promise<Objective> {
+		// Snapshot before awaiting the period lock so callers cannot change this write.
+		params = { ...params };
+		const drafts = initialKeyResults.map((draft) => ({ ...draft }));
 		const period = this.normalizePeriod(params.period, params.periodType);
 		if (!this.parser.isValidPeriod(period, params.periodType)) {
 			throw new Error(this.t("errors.invalidPeriod", { period }));
 		}
 		return this.withPeriodLocks([period], async () => {
 			await this.assertPeriodWritable(period);
+			if (!params.title.trim() || !parseLocalDate(params.created) || !parseLocalDate(params.due)) {
+				throw new Error(this.t("errors.invalidObjectiveFields"));
+			}
+			for (const draft of drafts) {
+				if (!draft.title.trim() || !parseLocalDate(draft.due) ||
+					!["score", "percentage", "number", "boolean"].includes(draft.unit) ||
+					!["low", "medium", "high"].includes(draft.confidence) ||
+					!isValidKeyResultValues(draft.unit, draft.current, draft.target) ||
+					!isValidKeyResultWeight(draft.weight)) {
+					throw new Error(this.t("errors.invalidKeyResultFields"));
+				}
+			}
 			const existing = await this.getObjectiveSummaries(period);
 			const reserved = await this.getReferencedIds(period);
 			const nextId = this.getNextObjectiveNumber(existing, reserved);
@@ -379,6 +396,14 @@ export class OKRManager {
 				filePath,
 				keyResults: [],
 			};
+			objective.keyResults = drafts.map((draft, order) => ({
+				...draft, title: draft.title.trim(), description: draft.description.trim(), owner: draft.owner.trim(),
+				id: `${id}-KR${order + 1}`, objectiveId: id, period, periodType: params.periodType,
+				order, filePath, created: params.created, status: "active", checkIns: [], hasBlocker: false,
+				progress: this.settings.autoComputeProgress
+					? this.parser.calculateKRProgress(draft.current, draft.target, draft.unit) : 0,
+			}));
+			objective.progress = this.parser.calculateObjectiveProgress(objective.keyResults);
 
 			await this.app.vault.create(
 				filePath,

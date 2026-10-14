@@ -732,7 +732,7 @@ export class DashboardView extends ItemView {
 	}
 
 	private openNewObjectiveModal(): void {
-		new NewObjectiveModal(this.app, this.manager).open();
+		new NewObjectiveModal(this.app, this.manager, undefined, this.currentPeriod || undefined).open();
 	}
 
 	private renderOverdueReminder(container: HTMLElement): void {

@@ -2,8 +2,9 @@ import { App, Modal, Notice, TFile } from "obsidian";
 import { type TranslationValue } from "../i18n";
 import { OKRManager } from "../manager/OKRManager";
 import { OKRPeriodType } from "../types";
-import { getTodayLocalDate } from "../utils/date";
-import { getElementDocument, isActiveElement } from "../utils/document";
+import { getTodayLocalDate, parseLocalDate } from "../utils/date";
+import { associateFields, setFieldError } from "../utils/form";
+import { KRDraftEditor } from "./KRDraftEditor";
 
 export class NewObjectiveModal extends Modal {
 	private period: string = "";
@@ -13,13 +14,19 @@ export class NewObjectiveModal extends Modal {
 	private due: string = "";
 	private description: string = "";
 	private isSubmitting = false;
-	private onComplete?: () => void;
+	private onComplete?: () => void | Promise<void>;
+	private dueEdited = false;
+	private saved = false;
+	private active = false;
+	private drafts?: KRDraftEditor;
+	private disabledControls = new Map<HTMLInputElement | HTMLButtonElement, boolean>();
 	private validate!: () => boolean;
 
 	constructor(
 		app: App,
 		private manager: OKRManager,
-		onComplete?: () => void,
+		onComplete?: () => void | Promise<void>,
+		private initialPeriod?: string,
 	) {
 		super(app);
 		this.due = this.getDefaultDue();
@@ -27,15 +34,19 @@ export class NewObjectiveModal extends Modal {
 	}
 
 	onOpen(): void {
+		if (this.isSubmitting || this.saved) return;
 		void super.onOpen();
 		const { contentEl } = this;
-		const modalDoc = getElementDocument(this.modalEl);
+		this.active = true;
+		this.saved = false;
+		this.title = this.owner = this.description = "";
+		this.dueEdited = false;
 		contentEl.empty();
 		this.modalEl.addClass("okr-modal");
 		const parser = this.manager.getParser();
-		this.periodType = this.manager.getSettings().defaultPeriodType;
-		this.period = parser.getCurrentPeriod(this.periodType);
-		this.due = parser.getDefaultDue(this.periodType);
+		this.periodType = this.initialPeriod ? parser.inferPeriodType(this.initialPeriod) : this.manager.getSettings().defaultPeriodType;
+		this.period = this.initialPeriod ?? parser.getCurrentPeriod(this.periodType);
+		this.due = parser.getDueForPeriod(this.period, this.periodType) ?? "";
 
 		contentEl.createEl("h2", {
 			cls: "okr-modal-title",
@@ -87,7 +98,7 @@ export class NewObjectiveModal extends Modal {
 		periodTypeSelect.addEventListener("change", () => {
 			this.periodType = periodTypeSelect.value as OKRPeriodType;
 			this.period = parser.getCurrentPeriod(this.periodType);
-			this.due = parser.getDefaultDue(this.periodType);
+			if (!this.dueEdited) this.due = parser.getDefaultDue(this.periodType);
 			periodInput.value = this.period;
 			dueInput.value = this.due;
 			periodHint.setText(this.getPeriodHint(this.periodType));
@@ -98,7 +109,7 @@ export class NewObjectiveModal extends Modal {
 		periodInput.addEventListener("input", () => {
 			this.period = periodInput.value.trim();
 			const valid = parser.isValidPeriod(this.period, this.periodType);
-			if (valid) {
+			if (valid && !this.dueEdited) {
 				this.due =
 					parser.getDueForPeriod(this.period, this.periodType) ?? this.due;
 				dueInput.value = this.due;
@@ -127,7 +138,7 @@ export class NewObjectiveModal extends Modal {
 		});
 
 		const ownerField = contentEl.createDiv("okr-field");
-		this.createRequiredLabel(ownerField, this.t("modals.fields.owner"));
+		ownerField.createEl("label", { cls: "okr-label", text: this.t("modals.fields.owner") });
 		const ownerInput = ownerField.createEl("input", {
 			cls: "okr-input",
 			type: "text",
@@ -144,8 +155,19 @@ export class NewObjectiveModal extends Modal {
 			type: "date",
 		});
 		dueInput.value = this.due;
-		dueInput.addEventListener("change", () => {
+		const updateDue = (): void => {
+			this.dueEdited = true;
 			this.due = dueInput.value;
+			this.validate();
+		};
+		dueInput.addEventListener("input", updateDue);
+		dueInput.addEventListener("change", updateDue);
+		const dueError = dueField.createDiv({ cls: "okr-input-error", text: this.t("modals.input.dateError") });
+		const resetDue = dueField.createEl("button", { cls: "okr-btn-secondary", text: this.t("modals.newObjective.resetDue"), attr: { type: "button" } });
+		resetDue.addEventListener("click", () => {
+			this.dueEdited = false;
+			this.due = parser.getDueForPeriod(this.period, this.periodType) ?? "";
+			dueInput.value = this.due;
 			this.validate();
 		});
 
@@ -162,6 +184,7 @@ export class NewObjectiveModal extends Modal {
 			this.description = descInput.value.trim();
 		});
 
+		this.drafts = new KRDraftEditor(contentEl.createDiv("okr-drafts"), this.manager.getI18n(), () => ({ owner: this.owner, due: this.due }), () => this.validate());
 		const footer = contentEl.createDiv("okr-modal-footer");
 		const cancelBtn = footer.createEl("button", {
 			cls: "okr-btn-cancel",
@@ -179,29 +202,23 @@ export class NewObjectiveModal extends Modal {
 		});
 
 		this.validate = () => {
+			if (!this.active) return false;
+			this.due = dueInput.value;
+			this.drafts?.inherit();
+			setFieldError(dueInput, dueError, !!parseLocalDate(this.due));
 			const valid =
 				parser.isValidPeriod(this.period, this.periodType) &&
 				this.period.length > 0 &&
 				this.title.length > 0 &&
-				this.owner.length > 0 &&
-				this.due.length > 0 &&
+				!!parseLocalDate(this.due) &&
+				(this.drafts?.isValid() ?? true) && !this.saved &&
 				!this.isSubmitting;
 			confirmBtn.disabled = !valid;
 			return valid;
 		};
 		this.validate();
-
-		this.modalEl.addEventListener("keydown", (e) => {
-			if (e.key === "Escape") {
-				this.close();
-				return;
-			}
-
-			if (e.key === "Enter" && !isActiveElement(descInput, modalDoc)) {
-				e.preventDefault();
-				void this.submit();
-			}
-		});
+		associateFields(contentEl);
+		titleInput.focus();
 	}
 
 	private async submit(): Promise<void> {
@@ -210,6 +227,7 @@ export class NewObjectiveModal extends Modal {
 		}
 
 		this.isSubmitting = true;
+		this.setBusy(true);
 		this.validate();
 		try {
 			const today = getTodayLocalDate();
@@ -222,18 +240,28 @@ export class NewObjectiveModal extends Modal {
 				status: "active",
 				created: today,
 				due: this.due,
-			});
-
-			const file = this.app.vault.getAbstractFileByPath(obj.filePath);
-			if (file instanceof TFile) {
-				await this.app.workspace.openLinkText(file.path, "", false);
-			}
+			}, this.drafts?.snapshot());
+			this.saved = true;
 
 			new Notice(
 				this.t("modals.newObjective.created", { title: obj.title }),
 			);
-			this.onComplete?.();
-			this.close();
+			let followUpFailed = false;
+			if (this.active) {
+				try {
+					const file = this.app.vault.getAbstractFileByPath(obj.filePath);
+					if (file instanceof TFile) await this.app.workspace.openLinkText(file.path, "", false);
+				} catch {
+					followUpFailed = true;
+				}
+			}
+			if (this.active) {
+				try { await this.onComplete?.(); }
+				catch { followUpFailed = true; }
+			}
+			if (followUpFailed) {
+				new Notice(this.t("modals.savedFollowUpFailed"));
+			}
 		} catch (error) {
 			new Notice(
 				error instanceof Error
@@ -244,11 +272,30 @@ export class NewObjectiveModal extends Modal {
 			);
 		} finally {
 			this.isSubmitting = false;
-			this.validate();
+			if (this.active) {
+				this.setBusy(false);
+				if (this.saved) this.close(); else this.validate();
+			}
 		}
 	}
 
+	private setBusy(busy: boolean): void {
+		if (busy) {
+			this.contentEl.querySelectorAll<HTMLInputElement | HTMLButtonElement>("input, select, textarea, button").forEach((control) => {
+				this.disabledControls.set(control, control.disabled);
+				control.disabled = true;
+			});
+		} else {
+			this.disabledControls.forEach((disabled, control) => { control.disabled = disabled; });
+			this.disabledControls.clear();
+		}
+		this.contentEl.querySelector<HTMLButtonElement>(".okr-btn-confirm")?.setText(this.t(busy ? "actions.saving" : "actions.create"));
+	}
+
+	close(): void { if (!this.isSubmitting) super.close(); }
+
 	onClose(): void {
+		this.active = false;
 		super.onClose();
 		const { contentEl } = this;
 		contentEl.empty();

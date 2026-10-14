@@ -5,10 +5,10 @@
 A local-first Obsidian plugin for planning weighted OKRs, monitoring execution health, recording check-ins, and running structured period reviews in Markdown.
 
 ![Obsidian](https://img.shields.io/badge/Obsidian-%3E%3D1.7.2-blueviolet)
-![Version](https://img.shields.io/badge/version-1.4.1-blue)
+![Version](https://img.shields.io/badge/version-1.5.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-[中文文档](./README.zh-CN.md) · [Release notes](./docs/releases/1.4.1.md) · [Features](#features) · [Quick start](#quick-start) · [Health model](#progress-and-health-model) · [Review workflows](#structured-review-workflows) · [Storage](#markdown-storage-model)
+[中文文档](./README.zh-CN.md) · [Release notes](./docs/releases/1.5.0.md) · [Features](#features) · [Quick start](#quick-start) · [Health model](#progress-and-health-model) · [Review workflows](#structured-review-workflows) · [Storage](#markdown-storage-model)
 
 </div>
 
@@ -93,11 +93,17 @@ Open **Settings → Vault OKR Manager**.
 ### 2. Create an Objective and weighted KRs
 
 1. Run **Vault OKR Manager: New objective** from the command palette.
-2. Choose a period and provide the title, owner, dates, and optional description.
-3. Run **New key result**, or add a KR from the Objective card.
-4. Set a positive relative weight. A value of `1` is the default.
+2. Choose a period and provide the title and deadline. Owner is an optional text note in both Objective and KR forms.
+3. Save the Objective alone, or use **Add key result** to add one or more draft cards before saving. Drafts save together in the same Markdown file; cancelling discards them. You can still run **New key result** or add a KR from the Objective card later.
+4. Set a positive relative weight, including small values such as `0.05`. A value of `1` is the default.
 
 Weights are relative, so `2, 1, 1` means 50%, 25%, and 25%. They do not need to total 100.
+
+Creating from the dashboard starts with its selected period. A deadline follows the period until you edit it, including clearing it; **Restore period default date** resumes automatic defaults. KR owner and deadline inherit from the parent until you edit those fields. No KR is required, and deadlines may lie outside the period.
+
+**Postpone** defaults to today for an overdue Objective, or the day after its existing deadline when it is due today or later. The shortcuts use today, today + 7 days, or today + 30 days. Any valid date later than the original deadline is allowed; a still-overdue date shows a non-blocking hint. Only the Objective deadline changes—its period and KR deadlines are preserved.
+
+Use the explicit save/create button to submit; Enter in ordinary fields does not save. In **Edit Objective**, editing or deleting a KR saves immediately. Cancelling the parent window only discards unsaved Objective fields.
 
 ### 3. Record progress
 

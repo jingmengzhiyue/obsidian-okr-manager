@@ -2,14 +2,15 @@ import { App, Modal, Notice } from "obsidian";
 import { type TranslationValue } from "../i18n";
 import { OKRManager } from "../manager/OKRManager";
 import { KeyResult } from "../types";
-import { getTodayLocalDate } from "../utils/date";
+import { getTodayLocalDate, parseLocalDate } from "../utils/date";
 import { getElementDocument, isActiveElement } from "../utils/document";
 import { isValidCheckInFields } from "../utils/validation";
+import { associateFields, setFieldError } from "../utils/form";
 
 interface CheckInModalOptions {
 	prefillKrId?: string;
 	prefillPeriod?: string;
-	onComplete?: () => void;
+	onComplete?: () => void | Promise<void>;
 }
 
 export class CheckInModal extends Modal {
@@ -22,6 +23,10 @@ export class CheckInModal extends Modal {
 	private blocker: string = "";
 	private krs: KeyResult[] = [];
 	private isSubmitting = false;
+	private saved = false;
+	private active = false;
+	private generation = 0;
+	private restoreControls?: () => void;
 	private inputSource: "current" | "progress" = "current";
 	private validate!: () => boolean;
 
@@ -37,7 +42,11 @@ export class CheckInModal extends Modal {
 	}
 
 	async onOpen(): Promise<void> {
+		if (this.isSubmitting || this.saved) return;
+		this.active = true;
+		const generation = ++this.generation;
 		await super.onOpen();
+		if (!this.active || generation !== this.generation) return;
 		const { contentEl } = this;
 		const modalDoc = getElementDocument(this.modalEl);
 		contentEl.empty();
@@ -49,8 +58,11 @@ export class CheckInModal extends Modal {
 		});
 
 		try {
-			this.krs = await this.loadAllKeyResults();
+			const krs = await this.loadAllKeyResults();
+			if (!this.active || generation !== this.generation) return;
+			this.krs = krs;
 		} catch (error) {
+			if (!this.active || generation !== this.generation) return;
 			this.krs = [];
 			new Notice(
 				this.t("dashboard.loadFailedWithReason", {
@@ -60,12 +72,16 @@ export class CheckInModal extends Modal {
 							: this.t("errors.unknown"),
 				}),
 			);
+			contentEl.createEl("p", { text: this.t("modals.checkIn.loadFailed") });
+			const retry = contentEl.createEl("button", { text: this.t("actions.retry"), attr: { type: "button" } });
+			retry.addEventListener("click", () => { void this.onOpen(); });
+			return;
 		}
 		if (this.krId) {
 			const selected = this.findSelectedKR();
 			this.period = selected?.period ?? this.period;
 		}
-		if (!this.findSelectedKR() && this.krs.length > 0) {
+		if (!this.findSelectedKR() && !this.options.prefillKrId && !this.options.prefillPeriod && this.krs.length > 0) {
 			const first = this.krs[0];
 			this.krId = first?.id ?? "";
 			this.period = first?.period ?? "";
@@ -75,6 +91,10 @@ export class CheckInModal extends Modal {
 		const krField = contentEl.createDiv("okr-field");
 		this.createRequiredLabel(krField, this.t("modals.checkIn.selectKeyResult"));
 		const krSelect = krField.createEl("select", { cls: "okr-select" });
+		if (!this.findSelectedKR() && (this.options.prefillKrId || this.options.prefillPeriod)) {
+			krField.createDiv({ cls: "okr-input-hint", text: this.t("modals.checkIn.invalidContext") });
+			krSelect.createEl("option", { text: this.t("modals.checkIn.invalidContext"), value: "" });
+		}
 		if (this.krs.length === 0) {
 			krSelect.createEl("option", {
 				text: this.t("modals.checkIn.noKeyResults"),
@@ -113,10 +133,13 @@ export class CheckInModal extends Modal {
 			type: "date",
 		});
 		dateInput.value = this.date;
-		dateInput.addEventListener("change", () => {
+		const updateDate = (): void => {
 			this.date = dateInput.value;
 			this.validate();
-		});
+		};
+		dateInput.addEventListener("input", updateDate);
+		dateInput.addEventListener("change", updateDate);
+		const dateError = dateField.createDiv({ cls: "okr-input-error", text: this.t("modals.input.dateError") });
 
 		const currentField = contentEl.createDiv("okr-field");
 		this.createRequiredLabel(currentField, this.t("modals.checkIn.value"));
@@ -150,7 +173,7 @@ export class CheckInModal extends Modal {
 				"visible",
 				currentInput.value.length > 0 && !valid,
 			);
-			if (this.manager.getSettings().autoComputeProgress) {
+			if (valid && this.manager.getSettings().autoComputeProgress) {
 				this.progress = this.calculateProgressFromCurrent();
 				progressInput.value = String(this.progress);
 				slider.value = String(this.progress);
@@ -180,6 +203,7 @@ export class CheckInModal extends Modal {
 			const value = Number(progressInput.value);
 			const selected = this.findSelectedKR();
 			const valid =
+				progressInput.value.length > 0 &&
 				Number.isFinite(value) &&
 				Number.isInteger(value) &&
 				value >= 0 &&
@@ -197,7 +221,7 @@ export class CheckInModal extends Modal {
 			);
 			slider.value = String(this.progress);
 			sliderVal.setText(`${this.progress}%`);
-			if (this.manager.getSettings().autoComputeProgress) {
+			if (valid && this.manager.getSettings().autoComputeProgress) {
 				this.current = this.calculateCurrentFromProgress();
 				if (!isActiveElement(currentInput, modalDoc)) {
 					currentInput.value = String(this.current);
@@ -214,6 +238,7 @@ export class CheckInModal extends Modal {
 		slider.setAttribute("min", "0");
 		slider.setAttribute("max", "100");
 		slider.setAttribute("step", "1");
+		slider.setAttribute("aria-label", this.t("modals.checkIn.progress"));
 		slider.value = String(this.progress);
 		const sliderVal = sliderRow.createSpan({
 			cls: "okr-slider-value",
@@ -230,7 +255,7 @@ export class CheckInModal extends Modal {
 				this.progress === 100;
 			progressInput.toggleClass("okr-invalid", !valid);
 			progressError.toggleClass("visible", !valid);
-			if (this.manager.getSettings().autoComputeProgress) {
+			if (valid && this.manager.getSettings().autoComputeProgress) {
 				this.current = this.calculateCurrentFromProgress();
 				if (!isActiveElement(currentInput, modalDoc)) {
 					currentInput.value = String(this.current);
@@ -295,9 +320,22 @@ export class CheckInModal extends Modal {
 		});
 
 		this.validate = () => {
+			if (!this.active) return false;
 			const selected = this.findSelectedKR();
+			this.date = dateInput.value;
+			setFieldError(dateInput, dateError, !!parseLocalDate(this.date));
+			const current = Number(currentInput.value), progress = Number(progressInput.value);
+			const boolean = selected?.unit === "boolean";
+			const currentValid = currentInput.value.length > 0 && Number.isFinite(current) && current >= 0 && (!boolean || current === 0 || current === 1);
+			const progressValid = progressInput.value.length > 0 && Number.isInteger(progress) && progress >= 0 && progress <= 100 && (!boolean || progress === 0 || progress === 100);
+			currentError.setText(this.t(boolean ? "modals.input.booleanCurrentError" : "modals.checkIn.currentError"));
+			progressError.setText(this.t(boolean ? "modals.input.booleanProgressError" : "modals.checkIn.progressError"));
+			setFieldError(currentInput, currentError, currentValid);
+			setFieldError(progressInput, progressError, progressValid);
+			if (currentValid) this.current = current;
+			if (progressValid) this.progress = progress;
 			const valid =
-				!this.isSubmitting &&
+				this.active && !this.saved && !this.isSubmitting && !!selected &&
 				this.krId.length > 0 &&
 				this.krs.length > 0 &&
 				isValidCheckInFields(
@@ -305,37 +343,27 @@ export class CheckInModal extends Modal {
 					currentInput.value,
 					progressInput.value,
 					selected?.unit,
-				) &&
-				!currentInput.hasClass("okr-invalid") &&
-				!progressInput.hasClass("okr-invalid");
+				);
 			confirmBtn.disabled = !valid;
 			return valid;
 		};
 		this.validate();
-
-		this.modalEl.addEventListener("keydown", (e) => {
-			if (e.key === "Escape") {
-				this.close();
-				return;
-			}
-
-			if (
-				e.key === "Enter" &&
-				!isActiveElement(noteInput, modalDoc) &&
-				!isActiveElement(blockerInput, modalDoc)
-			) {
-				e.preventDefault();
-				void this.submit();
-			}
-		});
+		associateFields(contentEl);
 	}
 
 	private async submit(): Promise<void> {
-		if (this.isSubmitting || !this.validate()) {
+		if (!this.active || this.saved || this.isSubmitting || !this.validate()) {
 			return;
 		}
 
 		this.isSubmitting = true;
+		const generation = this.generation;
+		const controls = Array.from(this.contentEl.querySelectorAll<HTMLInputElement>("input, select, textarea, button"));
+		const disabled = controls.map(control => control.disabled);
+		controls.forEach(control => { control.disabled = true; });
+		this.restoreControls = () => { controls.forEach((control, index) => { control.disabled = disabled[index] ?? false; }); };
+		const button = this.contentEl.querySelector<HTMLButtonElement>(".okr-btn-confirm");
+		button?.setText(this.t("actions.saving"));
 		this.validate();
 		try {
 			await this.manager.recordCheckIn({
@@ -351,6 +379,7 @@ export class CheckInModal extends Modal {
 				note: this.note,
 				blocker: this.blocker,
 			});
+			this.saved = true;
 
 			new Notice(
 				this.t("modals.checkIn.saved", {
@@ -358,11 +387,10 @@ export class CheckInModal extends Modal {
 					progress: this.progress,
 				}),
 			);
-			this.options.onComplete?.();
-			this.close();
+			if (this.active && generation === this.generation) await this.options.onComplete?.();
 		} catch (error) {
 			new Notice(
-				error instanceof Error
+				this.saved ? this.t("modals.savedFollowUpFailed") : error instanceof Error
 					? this.t("modals.checkIn.saveFailedWithReason", {
 							message: error.message,
 						})
@@ -370,15 +398,23 @@ export class CheckInModal extends Modal {
 			);
 		} finally {
 			this.isSubmitting = false;
-			this.validate();
+			if (this.active && generation === this.generation) {
+				this.restoreControls?.();
+				button?.setText(this.t("actions.save"));
+				if (this.saved) this.close(); else this.validate();
+			}
 		}
 	}
 
 	onClose(): void {
+		this.active = false;
+		this.generation++;
 		super.onClose();
 		const { contentEl } = this;
 		contentEl.empty();
 	}
+
+	close(): void { if (!this.isSubmitting) super.close(); }
 
 	private async loadAllKeyResults(): Promise<KeyResult[]> {
 		const writablePeriods = await this.manager.getWritablePeriods();

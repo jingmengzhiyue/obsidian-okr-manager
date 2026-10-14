@@ -48,3 +48,11 @@ export function diffLocalDates(left: string, right: string): number | null {
 	const dayInMs = 24 * 60 * 60 * 1000;
 	return Math.round((leftDate.getTime() - rightDate.getTime()) / dayInMs);
 }
+
+/** Add calendar days in local time, including across daylight-saving changes. */
+export function addLocalDays(value: string, days: number): string | null {
+	const date = parseLocalDate(value);
+	if (!date) return null;
+	date.setDate(date.getDate() + days);
+	return formatLocalDate(date);
+}

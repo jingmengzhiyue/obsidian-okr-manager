@@ -6,7 +6,8 @@ import type {
 	ReviewSectionKey,
 	ReviewSections,
 } from "../types";
-import { getTodayLocalDate } from "../utils/date";
+import { getTodayLocalDate, parseLocalDate } from "../utils/date";
+import { associateFields, setFieldError } from "../utils/form";
 import {
 	createEmptyReviewSections,
 	getReviewSectionKeys,
@@ -17,6 +18,11 @@ export class ReviewEditorModal extends Modal {
 	private reviewDate: string;
 	private sections: ReviewSections;
 	private isSubmitting = false;
+	private saved = false;
+	private active = false;
+	private generation = 0;
+	private dateInput?: HTMLInputElement;
+	private dateError?: HTMLElement;
 	private saveButton: HTMLButtonElement | null = null;
 
 	constructor(
@@ -25,7 +31,7 @@ export class ReviewEditorModal extends Modal {
 		private period: string,
 		private type: PeriodReviewType,
 		private review?: PeriodReview,
-		private onComplete?: (review: PeriodReview) => void,
+		private onComplete?: (review: PeriodReview) => void | Promise<void>,
 	) {
 		super(app);
 		this.review = review ? { ...review, sections: { ...review.sections } } : undefined;
@@ -36,15 +42,22 @@ export class ReviewEditorModal extends Modal {
 	}
 
 	onOpen(): void {
+		if (this.isSubmitting || this.saved) return;
+		this.active = true;
+		this.generation++;
 		void super.onOpen();
 		this.modalEl.addClass("okr-modal", "okr-review-editor-modal");
 		this.render();
 	}
 
 	onClose(): void {
+		this.active = false;
+		this.generation++;
 		super.onClose();
 		this.contentEl.empty();
 	}
+
+	close(): void { if (!this.isSubmitting) super.close(); }
 
 	private render(): void {
 		this.contentEl.empty();
@@ -64,10 +77,14 @@ export class ReviewEditorModal extends Modal {
 		});
 		dateInput.value = this.reviewDate;
 		dateInput.disabled = this.review != null;
-		dateInput.addEventListener("change", () => {
+		this.dateInput = dateInput;
+		this.dateError = dateField.createDiv({ cls: "okr-input-error", text: this.t("modals.input.dateError") });
+		const updateDate = (): void => {
 			this.reviewDate = dateInput.value;
 			this.validate();
-		});
+		};
+		dateInput.addEventListener("input", updateDate);
+		dateInput.addEventListener("change", updateDate);
 
 		if (!this.review) {
 			this.contentEl.createEl("p", {
@@ -91,6 +108,7 @@ export class ReviewEditorModal extends Modal {
 			text: this.t("actions.save"),
 		});
 		this.saveButton.addEventListener("click", () => void this.submit());
+		associateFields(this.contentEl);
 		this.validate();
 	}
 
@@ -124,9 +142,12 @@ export class ReviewEditorModal extends Modal {
 	}
 
 	private validate(): boolean {
+		if (!this.active) return false;
+		if (this.dateInput) this.reviewDate = this.dateInput.value;
+		if (this.dateInput && this.dateError) setFieldError(this.dateInput, this.dateError, !!parseLocalDate(this.reviewDate));
 		const valid =
-			!this.isSubmitting &&
-			this.reviewDate.length > 0 &&
+			this.active && !this.saved && !this.isSubmitting &&
+			!!parseLocalDate(this.reviewDate) &&
 			hasRequiredReviewContent(this.type, this.sections);
 		if (this.saveButton) {
 			this.saveButton.disabled = !valid;
@@ -139,31 +160,41 @@ export class ReviewEditorModal extends Modal {
 			return;
 		}
 		this.isSubmitting = true;
+		const generation = this.generation;
+		const controls = Array.from(this.contentEl.querySelectorAll<HTMLInputElement>("input, select, textarea, button"));
+		const disabled = controls.map(control => control.disabled);
+		controls.forEach(control => { control.disabled = true; });
+		this.saveButton?.setText(this.t("actions.saving"));
+		const sections = { ...this.sections };
 		this.validate();
 		try {
 			const saved = this.review
 				? await this.manager.updatePeriodReview({
 						period: this.period,
 						reviewId: this.review.id,
-						sections: this.sections,
+						sections,
 						baseSections: this.review.sections,
 					})
 				: await this.manager.createPeriodReview({
 						period: this.period,
 						type: this.type,
 						reviewDate: this.reviewDate,
-						sections: this.sections,
+						sections,
 					});
 			new Notice(this.t("notices.reviewSaved"));
-			this.onComplete?.(saved);
-			this.close();
+			this.saved = true;
+			if (this.active && generation === this.generation) await this.onComplete?.(saved);
 		} catch (error) {
 			new Notice(
-				error instanceof Error ? error.message : this.t("errors.unknown"),
+				this.saved ? this.t("modals.savedFollowUpFailed") : error instanceof Error ? error.message : this.t("errors.unknown"),
 			);
 		} finally {
 			this.isSubmitting = false;
-			this.validate();
+			if (this.active && generation === this.generation) {
+				controls.forEach((control, index) => { control.disabled = disabled[index] ?? false; });
+				this.saveButton?.setText(this.t("actions.save"));
+				if (this.saved) this.close(); else this.validate();
+			}
 		}
 	}
 

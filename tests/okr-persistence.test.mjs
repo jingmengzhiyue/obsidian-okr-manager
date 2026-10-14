@@ -156,7 +156,9 @@ test("real edit modals preserve later changes when submitting their opening snap
 	await h.manager.updateObjective(base.id, base.period, { ...base, owner: "New owner" });
 	editor.titleValue = "Objective modal title";
 	await editor.submit();
-	postpone.due = "2026-07-01";
+	const postponeDate = postpone.contentEl.all().find((element) => element.type === "date");
+	postponeDate.value = "2026-07-01";
+	for (const handler of postponeDate.events.input ?? []) handler({});
 	await postpone.submit();
 	assert.equal(h.read().owner, "New owner");
 	assert.equal(h.read().title, "Objective modal title");
